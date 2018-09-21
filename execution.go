@@ -17,6 +17,7 @@ type Execution interface {
 
 	setEnv(env []string) error
 	setDir(dir string) error
+	getID() string
 }
 
 type createContainer struct {
@@ -125,4 +126,8 @@ func (c *createContainer) wait(d Docker) (exitCode int, err error) {
 		return -1, fmt.Errorf("dexec: error deleting container: %v", err)
 	}
 	return ec, nil
+}
+
+func (c *createContainer) getID() string {
+	return c.id
 }
