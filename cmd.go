@@ -237,8 +237,13 @@ func (c *Cmd) GetPID() string {
 	return ""
 }
 
+// Kill will stop a running container
 func (c *Cmd) Kill() error {
-	return c.docker.StopContainer(c.Method.getID(), 1)
+	if c.started {
+		return c.docker.StopContainer(c.Method.getID(), 1)
+	}
+
+	return nil
 }
 
 func closeFds(l []io.Closer) {
