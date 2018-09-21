@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/ahmetalpbalkan/go-dexec"
-	"github.com/fsouza/go-dockerclient"
 	"os"
 	"strings"
+
+	"github.com/OneCloudInc/go-dexec"
+	"github.com/fsouza/go-dockerclient"
 )
 
 func main() {
