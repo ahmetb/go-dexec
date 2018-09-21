@@ -227,6 +227,20 @@ func (c *Cmd) StderrPipe() (io.ReadCloser, error) {
 	return pr, nil
 }
 
+// GetPID will return the container ID of the Cmd's running container.  This is useful
+// for when we need to kill the process before completion or store its container ID
+func (c *Cmd) GetPID() string {
+	if c.started {
+		return c.Method.getID()
+	}
+
+	return ""
+}
+
+func (c *Cmd) Kill() error {
+	return c.docker.StopContainer(c.Method.getID(), 1)
+}
+
 func closeFds(l []io.Closer) {
 	for _, fd := range l {
 		fd.Close()
