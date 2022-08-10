@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/OneCloudInc/go-dexec"
+	"github.com/Workiva/go-dexec"
 	"github.com/fsouza/go-dockerclient"
 	. "gopkg.in/check.v1"
 )
