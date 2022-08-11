@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/OneCloudInc/go-dexec"
+	"github.com/Workiva/go-dexec"
 	"github.com/fsouza/go-dockerclient"
 )
 
