@@ -29,7 +29,7 @@ func TestOSExecCommandMatchesInterface(_ *testing.T) {
 
 func TestDexecCommandMatchesInterface(_ *testing.T) {
 	var c cmd
-	v := new(dexec.Cmd)
+	v := new(dexec.DockerCmd)
 	c = v // compile error
 	_ = c
 }

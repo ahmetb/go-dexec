@@ -72,7 +72,7 @@ func baseOpts() docker.CreateContainerOptions {
 		}}
 }
 
-func baseContainer(c *C) dexec.Execution {
+func baseContainer(c *C) dexec.Execution[dexec.Docker] {
 	e, err := dexec.ByCreatingContainer(baseOpts())
 	c.Assert(err, IsNil)
 	return e

@@ -10,10 +10,10 @@ import (
 
 // Execution determines how the command is going to be executed. Currently
 // the only method is ByCreatingContainer.
-type Execution interface {
-	create(d Docker, cmd []string) error
-	run(d Docker, stdin io.Reader, stdout, stderr io.Writer) error
-	wait(d Docker) (int, error)
+type Execution[T any] interface {
+	create(d T, cmd []string) error
+	run(d T, stdin io.Reader, stdout, stderr io.Writer) error
+	wait(d T) (int, error)
 
 	setEnv(env []string) error
 	setDir(dir string) error
@@ -32,7 +32,7 @@ type createContainer struct {
 //
 // The container will be created and started with Cmd.Start and will be deleted
 // before Cmd.Wait returns.
-func ByCreatingContainer(opts docker.CreateContainerOptions) (Execution, error) {
+func ByCreatingContainer(opts docker.CreateContainerOptions) (Execution[Docker], error) {
 	if opts.Config == nil {
 		return nil, errors.New("dexec: Config is nil")
 	}
