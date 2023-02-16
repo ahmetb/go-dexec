@@ -2,34 +2,39 @@ package dexec
 
 import (
 	"bytes"
+	"context"
 	"errors"
-	docker "github.com/fsouza/go-dockerclient"
+	"fmt"
+	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/api/services/tasks/v1"
+	"github.com/containerd/containerd/namespaces"
 	"io"
 	"io/ioutil"
 )
 
-// Docker contains connection to Docker API.
-// Use github.com/fsouza/go-dockerclient to initialize *docker.Client.
-type Docker struct {
-	*docker.Client
+type ContainerD struct {
+	*containerd.Client
+	Namespace string
 }
 
-// DockerCmd represents an external command being prepared or run.
-//
-// A DockerCmd cannot be reused after calling its Run, Output or CombinedOutput
-// methods.
-type DockerCmd struct {
+type ContainerDCmd struct {
 	GenericCmd
-	// Method provides the execution strategy for the context of the Cmd.
-	// An instance of Method should not be reused between Cmds.
-	Method Execution[Docker]
-
-	docker         Docker
-	closeAfterWait []io.Closer
+	Method     Execution[ContainerD]
+	containerD ContainerD
 }
 
-// Start starts the specified command but does not wait for it to complete.
-func (c *DockerCmd) Start() error {
+func (c ContainerD) Command(method Execution[ContainerD], name string, arg ...string) *ContainerDCmd {
+	return &ContainerDCmd{
+		GenericCmd: GenericCmd{
+			Path: name,
+			Args: arg,
+		},
+		Method:     method,
+		containerD: c,
+	}
+}
+
+func (c *ContainerDCmd) Start() error {
 	if c.Dir != "" {
 		if err := c.Method.setDir(c.Dir); err != nil {
 			return err
@@ -57,10 +62,10 @@ func (c *DockerCmd) Start() error {
 	}
 
 	cmd := append([]string{c.Path}, c.Args...)
-	if err := c.Method.create(c.docker, cmd); err != nil {
+	if err := c.Method.create(c.containerD, cmd); err != nil {
 		return err
 	}
-	if err := c.Method.run(c.docker, c.Stdin, c.Stdout, c.Stderr); err != nil {
+	if err := c.Method.run(c.containerD, c.Stdin, c.Stdout, c.Stderr); err != nil {
 		return err
 	}
 	return nil
@@ -73,12 +78,12 @@ func (c *DockerCmd) Start() error {
 //
 // Different than os/exec.Wait, this method will not release any resources
 // associated with Cmd (such as file handles).
-func (c *DockerCmd) Wait() error {
+func (c *ContainerDCmd) Wait() error {
 	defer closeFds(c.closeAfterWait)
 	if !c.started {
 		return errors.New("dexec: not started")
 	}
-	ec, err := c.Method.wait(c.docker)
+	ec, err := c.Method.wait(c.containerD)
 	if err != nil {
 		return err
 	}
@@ -95,7 +100,7 @@ func (c *DockerCmd) Wait() error {
 //
 // If the container exits with a non-zero exit code, the error is of type
 // *ExitError. Other error types may be returned for I/O problems and such.
-func (c *DockerCmd) Run() error {
+func (c *ContainerDCmd) Run() error {
 	if err := c.Start(); err != nil {
 		return err
 	}
@@ -108,7 +113,7 @@ func (c *DockerCmd) Run() error {
 // Docker API does not have strong guarantees over ordering of messages. For instance:
 //     >&1 echo out; >&2 echo err
 // may result in "out\nerr\n" as well as "err\nout\n" from this method.
-func (c *DockerCmd) CombinedOutput() ([]byte, error) {
+func (c *ContainerDCmd) CombinedOutput() ([]byte, error) {
 	if c.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
 	}
@@ -127,7 +132,7 @@ func (c *DockerCmd) CombinedOutput() ([]byte, error) {
 // *ExitError. Other error types may be returned for I/O problems and such.
 //
 // If c.Stderr was nil, Output populates ExitError.Stderr.
-func (c *DockerCmd) Output() ([]byte, error) {
+func (c *ContainerDCmd) Output() ([]byte, error) {
 	if c.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
 	}
@@ -151,7 +156,7 @@ func (c *DockerCmd) Output() ([]byte, error) {
 // when the command starts.
 //
 // Different than os/exec.StdinPipe, returned io.WriteCloser should be closed by user.
-func (c *DockerCmd) StdinPipe() (io.WriteCloser, error) {
+func (c *ContainerDCmd) StdinPipe() (io.WriteCloser, error) {
 	if c.Stdin != nil {
 		return nil, errors.New("dexec: Stdin already set")
 	}
@@ -164,7 +169,7 @@ func (c *DockerCmd) StdinPipe() (io.WriteCloser, error) {
 // the command starts.
 //
 // Wait will close the pipe after seeing the command exit or in error conditions.
-func (c *DockerCmd) StdoutPipe() (io.ReadCloser, error) {
+func (c *ContainerDCmd) StdoutPipe() (io.ReadCloser, error) {
 	if c.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
 	}
@@ -178,7 +183,7 @@ func (c *DockerCmd) StdoutPipe() (io.ReadCloser, error) {
 // the command starts.
 //
 // Wait will close the pipe after seeing the command exit or in error conditions.
-func (c *DockerCmd) StderrPipe() (io.ReadCloser, error) {
+func (c *ContainerDCmd) StderrPipe() (io.ReadCloser, error) {
 	if c.Stderr != nil {
 		return nil, errors.New("dexec: Stderr already set")
 	}
@@ -189,8 +194,8 @@ func (c *DockerCmd) StderrPipe() (io.ReadCloser, error) {
 }
 
 // GetPID will return the container ID of the Cmd's running container.  This is useful
-// for when we need to kill the process before completion or store its container ID
-func (c *DockerCmd) GetPID() string {
+// for when we need to cleanup the process before completion or store its container ID
+func (c *ContainerDCmd) GetPID() string {
 	if c.started {
 		return c.Method.getID()
 	}
@@ -198,19 +203,26 @@ func (c *DockerCmd) GetPID() string {
 	return ""
 }
 
-// Kill will stop a running container
-func (c *DockerCmd) Kill() error {
-	if c.started {
-		return c.docker.StopContainer(c.Method.getID(), 1)
-	}
-
-	return nil
-}
-
-func (c *DockerCmd) SetDir(dir string) {
+func (c *ContainerDCmd) SetDir(dir string) {
 	c.Dir = dir
 }
 
-func (c *DockerCmd) SetStderr(writer io.Writer) {
+func (c *ContainerDCmd) SetStderr(writer io.Writer) {
 	c.Stderr = writer
+}
+
+// Kill will stop a running container
+func (c *ContainerDCmd) Kill() error {
+	if c.started {
+		ctx := namespaces.WithNamespace(context.Background(), c.containerD.Namespace)
+		containerId := c.Method.getID()
+		execId := fmt.Sprintf("%s-task", c.Method.getID())
+		_, err := c.containerD.TaskService().Kill(ctx, &tasks.KillRequest{ContainerID: containerId, ExecID: execId})
+		if err != nil {
+			return err
+		}
+		return c.containerD.ContainerService().Delete(ctx, containerId)
+	}
+
+	return nil
 }

@@ -18,6 +18,7 @@ type Execution[T any] interface {
 	setEnv(env []string) error
 	setDir(dir string) error
 	getID() string
+	kill(d T) error
 }
 
 type createContainer struct {
@@ -130,4 +131,8 @@ func (c *createContainer) wait(d Docker) (exitCode int, err error) {
 
 func (c *createContainer) getID() string {
 	return c.id
+}
+
+func (c *createContainer) kill(d Docker) error {
+	return d.StopContainer(c.getID(), 1)
 }

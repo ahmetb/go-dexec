@@ -15,6 +15,41 @@ type Cmd interface {
 	Run() error
 	Output() ([]byte, error)
 	CombinedOutput() ([]byte, error)
+	SetDir(dir string)
+}
+
+type GenericCmd struct {
+	// Path is the path or name of the command in the container.
+	Path string
+
+	// Arguments to the command in the container, excluding the command
+	// name as the first argument.
+	Args []string
+
+	// Env is environment variables to the command. If Env is nil, Run will use
+	// Env specified on Method or pre-built container image.
+	Env []string
+
+	// Dir specifies the working directory of the command. If Dir is the empty
+	// string, Run uses Dir specified on Method or pre-built container image.
+	Dir string
+
+	// Stdin specifies the process's standard input.
+	// If Stdin is nil, the process reads from the null device (os.DevNull).
+	//
+	// Run will not close the underlying handle if the Reader is an *os.File
+	// differently than os/exec.
+	Stdin io.Reader
+
+	// Stdout and Stderr specify the process's standard output and error.
+	// If either is nil, they will be redirected to the null device (os.DevNull).
+	//
+	// Run will not close the underlying handles if they are *os.File differently
+	// than os/exec.
+	Stdout         io.Writer
+	Stderr         io.Writer
+	started        bool
+	closeAfterWait []io.Closer
 }
 
 // Command returns the Cmd struct to execute the named program with given
@@ -22,7 +57,14 @@ type Cmd interface {
 //
 // For each new Cmd, you should create a new instance for "method" argument.
 func (d Docker) Command(method Execution[Docker], name string, arg ...string) *DockerCmd {
-	return &DockerCmd{Method: method, Path: name, Args: arg, docker: d}
+	return &DockerCmd{
+		GenericCmd: GenericCmd{
+			Path: name,
+			Args: arg,
+		},
+		Method: method,
+		docker: d,
+	}
 }
 
 func closeFds(l []io.Closer) {
