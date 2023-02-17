@@ -52,21 +52,6 @@ type GenericCmd struct {
 	closeAfterWait []io.Closer
 }
 
-// Command returns the Cmd struct to execute the named program with given
-// arguments using specified execution method.
-//
-// For each new Cmd, you should create a new instance for "method" argument.
-func (d Docker) Command(method Execution[Docker], name string, arg ...string) *DockerCmd {
-	return &DockerCmd{
-		GenericCmd: GenericCmd{
-			Path: name,
-			Args: arg,
-		},
-		Method: method,
-		docker: d,
-	}
-}
-
 func closeFds(l []io.Closer) {
 	for _, fd := range l {
 		fd.Close()

@@ -45,7 +45,8 @@ type createTask struct {
 
 func (t *createTask) create(c ContainerD, cmd []string) error {
 	t.cmd = cmd
-	expiration := t.opts.CommandTimeout + (60 * time.Second)
+	// add buffer to the command timeout
+	expiration := t.opts.CommandTimeout + (5 * time.Minute)
 	// the default containerd settings makes things eligible for garbage collection after 24 hours
 	// since we are spinning up hundreds of thousands of tasks per day, let's set a shorter expiration
 	// so we can try and be good netizens
