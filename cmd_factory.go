@@ -34,7 +34,7 @@ func getDockerExecution(config Config) Execution[Docker] {
 		},
 		HostConfig: &docker.HostConfig{
 			DNS:    config.NetworkConfig.DNS,
-			Mounts: convertDockerMounts(config.ContainerConfig.Mounts),
+			Mounts: convertMounts[docker.HostMount](config.ContainerConfig.Mounts),
 		},
 		Context: context.Background(),
 	})
@@ -44,7 +44,7 @@ func getDockerExecution(config Config) Execution[Docker] {
 func getContainerDExecution(config Config) Execution[ContainerD] {
 	exec, _ := ByCreatingTask(CreateTaskOptions{
 		Image:          config.ContainerConfig.Image,
-		Mounts:         convertContainerDMounts(config.ContainerConfig.Mounts),
+		Mounts:         convertMounts[specs.Mount](config.ContainerConfig.Mounts),
 		User:           config.ContainerConfig.User,
 		Env:            config.ContainerConfig.Env,
 		CommandTimeout: config.TaskConfig.Timeout,
@@ -53,27 +53,34 @@ func getContainerDExecution(config Config) Execution[ContainerD] {
 	return exec
 }
 
-func convertContainerDMounts(ms []Mount) []specs.Mount {
-	mounts := make([]specs.Mount, len(ms))
+type mountable interface {
+	docker.HostMount | specs.Mount
+}
+
+func convertMounts[T mountable](ms []Mount) []T {
+	mounts := make([]T, len(ms))
 	for i, mount := range ms {
-		mounts[i] = specs.Mount{
-			Type:        mount.Type,
-			Source:      mount.Source,
-			Destination: mount.Destination,
-			Options:     mount.Options,
-		}
+		mounts[i] = convertMount[T](mount)
 	}
 	return mounts
 }
 
-func convertDockerMounts(ms []Mount) []docker.HostMount {
-	mounts := make([]docker.HostMount, len(ms))
-	for i, mount := range ms {
-		mounts[i] = docker.HostMount{
-			Type:   mount.Type,
-			Source: mount.Source,
-			Target: mount.Destination,
+func convertMount[T mountable](m Mount) T {
+	var res T
+	switch v := any(&res).(type) {
+	case *docker.HostMount:
+		*v = docker.HostMount{
+			Type:   m.Type,
+			Source: m.Source,
+			Target: m.Destination,
+		}
+	case *specs.Mount:
+		*v = specs.Mount{
+			Type:        m.Type,
+			Source:      m.Source,
+			Destination: m.Destination,
+			Options:     m.Options,
 		}
 	}
-	return mounts
+	return res
 }
