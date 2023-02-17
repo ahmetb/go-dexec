@@ -2,12 +2,8 @@ package dexec
 
 import (
 	"bytes"
-	"context"
 	"errors"
-	"fmt"
 	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/api/services/tasks/v1"
-	"github.com/containerd/containerd/namespaces"
 	"io"
 	"io/ioutil"
 )
@@ -214,14 +210,7 @@ func (c *ContainerDCmd) SetStderr(writer io.Writer) {
 // Kill will stop a running container
 func (c *ContainerDCmd) Kill() error {
 	if c.started {
-		ctx := namespaces.WithNamespace(context.Background(), c.containerD.Namespace)
-		containerId := c.Method.getID()
-		execId := fmt.Sprintf("%s-task", c.Method.getID())
-		_, err := c.containerD.TaskService().Kill(ctx, &tasks.KillRequest{ContainerID: containerId, ExecID: execId})
-		if err != nil {
-			return err
-		}
-		return c.containerD.ContainerService().Delete(ctx, containerId)
+		return c.Method.kill(c.containerD)
 	}
 
 	return nil

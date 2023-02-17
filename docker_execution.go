@@ -123,3 +123,7 @@ func (c *createContainer) getID() string {
 func (c *createContainer) kill(d Docker) error {
 	return d.StopContainer(c.getID(), 1)
 }
+
+func (c *createContainer) cleanup(Docker) error {
+	return nil
+}

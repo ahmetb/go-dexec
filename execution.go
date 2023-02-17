@@ -17,4 +17,5 @@ type Execution[T ContainerClient] interface {
 	setDir(dir string) error
 	getID() string
 	kill(d T) error
+	cleanup(d T) error
 }

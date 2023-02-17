@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"io"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -68,7 +69,7 @@ func (t *createTask) create(c ContainerD, cmd []string) error {
 	}
 	t.container = container
 
-	return t.setMountPermissions()
+	return nil
 }
 
 func (t *createTask) createContainer(c ContainerD) (containerd.Container, error) {
@@ -76,6 +77,7 @@ func (t *createTask) createContainer(c ContainerD) (containerd.Container, error)
 	snapshotName := fmt.Sprintf("%s-snapshot", containerId)
 
 	specOpts := make([]oci.SpecOpts, 0)
+	specOpts = append(specOpts, t.createUserOpts()...)
 	specOpts = append(specOpts, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts))
 
 	return c.NewContainer(
@@ -84,42 +86,6 @@ func (t *createTask) createContainer(c ContainerD) (containerd.Container, error)
 		containerd.WithNewSnapshot(snapshotName, t.image),
 		containerd.WithNewSpec(specOpts...),
 	)
-}
-
-func (t *createTask) setMountPermissions() error {
-	task, err := t.container.NewTask(t.ctx, cio.NewCreator(cio.WithStreams(nil, io.Discard, io.Discard)))
-	if err != nil {
-		return errors.Wrap(err, "error creating task to set permissions")
-	}
-	spec, err := t.container.Spec(t.ctx)
-	if err != nil {
-		return errors.Wrap(err, "error getting container spec")
-	}
-	spec.Process.Args = []string{"chown", t.opts.User, "/go/src"}
-	ps, err := task.Exec(t.ctx, fmt.Sprintf("%s-chown", t.container.ID()), spec.Process, cio.NewCreator(cio.WithStreams(nil, io.Discard, io.Discard)))
-	if err != nil {
-		return errors.Wrap(err, "error starting process")
-	}
-
-	ch, err := ps.Wait(t.ctx)
-	if err != nil {
-		return errors.Wrap(err, "error waiting for process")
-	}
-
-	err = ps.Start(t.ctx)
-	if err != nil {
-		return errors.Wrap(err, "error starting process")
-	}
-
-	defer task.Delete(t.ctx)
-
-	ec := <-ch
-
-	if ec.ExitCode() != 0 {
-		return errors.Errorf("exit code %d while setting owner", ec.ExitCode())
-	}
-
-	return nil
 }
 
 func (t *createTask) createUserOpts() []oci.SpecOpts {
@@ -182,7 +148,7 @@ func (t *createTask) createProcessSpec() (*specs.Process, error) {
 }
 
 func (t *createTask) wait(c ContainerD) (int, error) {
-	defer t.kill(c)
+	defer t.cleanup(c)
 
 	exitStatus := <-t.exitChan
 	return int(exitStatus.ExitCode()), exitStatus.Error()
@@ -209,8 +175,19 @@ func (t *createTask) getID() string {
 }
 
 func (t *createTask) kill(c ContainerD) error {
+	err := t.task.Kill(t.ctx, syscall.SIGKILL, containerd.WithKillAll)
+	if err != nil {
+		return errors.Wrap(err, "error killing task")
+	}
+
+	return t.cleanup(c)
+}
+
+func (t *createTask) cleanup(ContainerD) error {
 	defer t.doneFunc(t.ctx)
-	t.task.Delete(t.ctx, containerd.WithProcessKill)
-	return t.container.Delete(t.ctx, containerd.WithSnapshotCleanup)
-	return nil
+	_, err := t.task.Delete(t.ctx)
+	if err != nil {
+		return errors.Wrap(err, "error deleting task")
+	}
+	return errors.Wrap(t.container.Delete(t.ctx, containerd.WithSnapshotCleanup), "error deleting container")
 }
