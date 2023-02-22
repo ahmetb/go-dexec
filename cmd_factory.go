@@ -15,7 +15,7 @@ func Command(client interface{}, config Config) Cmd {
 		execution := getDockerExecution(config)
 		return dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 	case *containerd.Client:
-		cdc := ContainerD{Client: c}
+		cdc := ContainerD{Client: c, Namespace: config.Namespace}
 		execution := getContainerDExecution(config)
 		return cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 	default:
