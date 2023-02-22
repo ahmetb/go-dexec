@@ -49,6 +49,7 @@ func getContainerDExecution(config Config) Execution[ContainerD] {
 		Env:            config.ContainerConfig.Env,
 		CommandTimeout: config.TaskConfig.Timeout,
 		WorkingDir:     config.TaskConfig.WorkingDir,
+		CommandDetails: config.CommandDetails,
 	})
 	return exec
 }

@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/google/uuid"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"io"
 	"strconv"
-	"syscall"
 	"time"
 )
+
+const randomSuffixLength = 6
 
 type CreateTaskOptions struct {
 	Image          string
@@ -24,6 +25,7 @@ type CreateTaskOptions struct {
 	Env            []string
 	CommandTimeout time.Duration
 	WorkingDir     string
+	CommandDetails CommandDetails
 }
 
 func ByCreatingTask(opts CreateTaskOptions) (Execution[ContainerD], error) {
@@ -74,7 +76,7 @@ func (t *createTask) create(c ContainerD, cmd []string) error {
 }
 
 func (t *createTask) createContainer(c ContainerD) (containerd.Container, error) {
-	containerId := uuid.New().String()
+	containerId := t.generateContainerId()
 	snapshotName := fmt.Sprintf("%s-snapshot", containerId)
 
 	specOpts := make([]oci.SpecOpts, 0)
@@ -87,6 +89,15 @@ func (t *createTask) createContainer(c ContainerD) (containerd.Container, error)
 		containerd.WithNewSnapshot(snapshotName, t.image),
 		containerd.WithNewSpec(specOpts...),
 	)
+}
+
+func (t *createTask) generateContainerId() string {
+	// AA: in order to prevent errors such as being unable to re-run a command due to a failure
+	// or timing issue when cleaning up a prior attempt, append a random suffix to the end to make
+	// sure we can always create the container
+	suffix := RandomString(randomSuffixLength)
+	details := t.opts.CommandDetails
+	return fmt.Sprintf("chains-%d-%d-%d-%s", details.ChainExecutorId, details.ExecutorId, details.ResultId, suffix)
 }
 
 func (t *createTask) createUserOpts() []oci.SpecOpts {
@@ -176,18 +187,13 @@ func (t *createTask) getID() string {
 }
 
 func (t *createTask) kill(c ContainerD) error {
-	err := t.task.Kill(t.ctx, syscall.SIGKILL, containerd.WithKillAll)
-	if err != nil {
-		return errors.Wrap(err, "error killing task")
-	}
-
 	return t.cleanup(c)
 }
 
 func (t *createTask) cleanup(ContainerD) error {
 	defer t.doneFunc(t.ctx)
-	_, err := t.task.Delete(t.ctx)
-	if err != nil {
+	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
+	if err != nil && !errdefs.IsNotFound(err) {
 		return errors.Wrap(err, "error deleting task")
 	}
 	return errors.Wrap(t.container.Delete(t.ctx, containerd.WithSnapshotCleanup), "error deleting container")

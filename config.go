@@ -7,6 +7,7 @@ type Config struct {
 	ContainerConfig ContainerConfig
 	NetworkConfig   NetworkConfig
 	TaskConfig      TaskConfig
+	CommandDetails  CommandDetails
 }
 
 type Mount struct {
@@ -32,4 +33,10 @@ type TaskConfig struct {
 
 type NetworkConfig struct {
 	DNS []string
+}
+
+type CommandDetails struct {
+	ExecutorId      int64
+	ChainExecutorId int64
+	ResultId        int64
 }
