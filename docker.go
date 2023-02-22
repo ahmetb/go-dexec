@@ -216,7 +216,7 @@ func (c *DockerCmd) GetPID() string {
 // Kill will stop a running container
 func (c *DockerCmd) Kill() error {
 	if c.started {
-		return c.docker.StopContainer(c.Method.getID(), 1)
+		return c.Method.kill(c.docker)
 	}
 
 	return nil
