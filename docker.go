@@ -229,3 +229,7 @@ func (c *DockerCmd) SetDir(dir string) {
 func (c *DockerCmd) SetStderr(writer io.Writer) {
 	c.Stderr = writer
 }
+
+func (c *DockerCmd) Cleanup() error {
+	return c.Method.cleanup(c.docker)
+}

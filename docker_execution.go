@@ -1,8 +1,8 @@
 package dexec
 
 import (
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"io"
 
 	"github.com/fsouza/go-dockerclient"
@@ -121,9 +121,29 @@ func (c *createContainer) getID() string {
 }
 
 func (c *createContainer) kill(d Docker) error {
-	return d.StopContainer(c.getID(), 1)
+	var nsc *docker.NoSuchContainer
+	var cnr *docker.ContainerNotRunning
+	err := d.StopContainer(c.getID(), 1)
+	// if container doesn't exist or already is killed
+	// do not return an error
+	if err == nil || errors.As(err, &nsc) || errors.As(err, &cnr) {
+		return nil
+	}
+	return errors.Wrap(err, "error stopping container")
 }
 
-func (c *createContainer) cleanup(Docker) error {
-	return nil
+func (c *createContainer) cleanup(d Docker) error {
+	containerId := c.getID()
+	var nsc *docker.NoSuchContainer
+	err := d.StopContainer(containerId, 1)
+	// if container doesn't exist we have nothing else to do
+	if errors.As(err, &nsc) {
+		return nil
+	}
+	var cnr *docker.ContainerNotRunning
+	if err != nil && !errors.As(err, &cnr) {
+		return errors.Wrap(err, "error stopping container")
+	}
+
+	return errors.Wrap(d.RemoveContainer(docker.RemoveContainerOptions{ID: containerId}), "error removing container")
 }

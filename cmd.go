@@ -16,6 +16,7 @@ type Cmd interface {
 	Output() ([]byte, error)
 	CombinedOutput() ([]byte, error)
 	SetDir(dir string)
+	Cleanup() error
 }
 
 type GenericCmd struct {

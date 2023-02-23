@@ -215,3 +215,7 @@ func (c *ContainerDCmd) Kill() error {
 
 	return nil
 }
+
+func (c *ContainerDCmd) Cleanup() error {
+	return c.Method.cleanup(c.containerD)
+}
