@@ -186,15 +186,23 @@ func (t *createTask) getID() string {
 	return t.container.ID()
 }
 
+// kill kills the running task and cleans up any resources that were created to run it. For all intents and purposes
+// kill is identical to cleanup
 func (t *createTask) kill(c ContainerD) error {
 	return t.cleanup(c)
 }
 
+// cleanup kills any tasks that are still running, deletes them, and deletes the container that ran the task. if the
+// api returns a NotFound error, the error is ignored and we will return nil. otherwise, any errors encountered during
+// the cleanup operations will be returned
 func (t *createTask) cleanup(ContainerD) error {
 	defer t.doneFunc(t.ctx)
 	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
 	if err != nil && !errdefs.IsNotFound(err) {
 		return errors.Wrap(err, "error deleting task")
+	}
+	if err = t.container.Delete(t.ctx, containerd.WithSnapshotCleanup); err == nil || errdefs.IsNotFound(err) {
+		return nil
 	}
 	return errors.Wrap(t.container.Delete(t.ctx, containerd.WithSnapshotCleanup), "error deleting container")
 }
