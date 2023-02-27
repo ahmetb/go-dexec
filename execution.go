@@ -3,7 +3,7 @@ package dexec
 import "io"
 
 type ContainerClient interface {
-	Docker | ContainerD
+	Docker | Containerd
 }
 
 // Execution determines how the command is going to be executed. Currently

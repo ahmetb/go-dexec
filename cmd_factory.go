@@ -15,8 +15,8 @@ func Command(client interface{}, config Config) Cmd {
 		execution := getDockerExecution(config)
 		return dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 	case *containerd.Client:
-		cdc := ContainerD{Client: c, Namespace: config.Namespace}
-		execution := getContainerDExecution(config)
+		cdc := Containerd{Client: c, Namespace: config.Namespace}
+		execution := getContainerdExecution(config)
 		return cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 	default:
 		panic(fmt.Errorf("unsupported client type: %v", c))
@@ -41,7 +41,7 @@ func getDockerExecution(config Config) Execution[Docker] {
 	return exec
 }
 
-func getContainerDExecution(config Config) Execution[ContainerD] {
+func getContainerdExecution(config Config) Execution[Containerd] {
 	exec, _ := ByCreatingTask(CreateTaskOptions{
 		Image:          config.ContainerConfig.Image,
 		Mounts:         convertMounts[specs.Mount](config.ContainerConfig.Mounts),

@@ -28,7 +28,7 @@ type CreateTaskOptions struct {
 	CommandDetails CommandDetails
 }
 
-func ByCreatingTask(opts CreateTaskOptions) (Execution[ContainerD], error) {
+func ByCreatingTask(opts CreateTaskOptions) (Execution[Containerd], error) {
 	return &createTask{opts: opts}, nil
 }
 
@@ -45,7 +45,7 @@ type createTask struct {
 	tmpDir    string
 }
 
-func (t *createTask) create(c ContainerD, cmd []string) error {
+func (t *createTask) create(c Containerd, cmd []string) error {
 	t.cmd = cmd
 	// add buffer to the command timeout
 	expiration := t.opts.CommandTimeout + (5 * time.Minute)
@@ -75,7 +75,7 @@ func (t *createTask) create(c ContainerD, cmd []string) error {
 	return nil
 }
 
-func (t *createTask) createContainer(c ContainerD) (containerd.Container, error) {
+func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
 	containerId := t.generateContainerId()
 	snapshotName := fmt.Sprintf("%s-snapshot", containerId)
 
@@ -107,7 +107,7 @@ func (t *createTask) createUserOpts() []oci.SpecOpts {
 	return []oci.SpecOpts{oci.WithUser(t.opts.User), oci.WithAdditionalGIDs(t.opts.User)}
 }
 
-func (t *createTask) run(c ContainerD, stdin io.Reader, stdout, stderr io.Writer) error {
+func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer) error {
 	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
 	task, err := t.createTask(opts...)
 	if err != nil {
@@ -159,7 +159,7 @@ func (t *createTask) createProcessSpec() (*specs.Process, error) {
 	return spec.Process, nil
 }
 
-func (t *createTask) wait(c ContainerD) (int, error) {
+func (t *createTask) wait(c Containerd) (int, error) {
 	defer t.cleanup(c)
 
 	exitStatus := <-t.exitChan
@@ -188,14 +188,14 @@ func (t *createTask) getID() string {
 
 // kill kills the running task and cleans up any resources that were created to run it. For all intents and purposes
 // kill is identical to cleanup
-func (t *createTask) kill(c ContainerD) error {
+func (t *createTask) kill(c Containerd) error {
 	return t.cleanup(c)
 }
 
 // cleanup kills any tasks that are still running, deletes them, and deletes the container that ran the task. if the
 // api returns a NotFound error, the error is ignored and we will return nil. otherwise, any errors encountered during
 // the cleanup operations will be returned
-func (t *createTask) cleanup(ContainerD) error {
+func (t *createTask) cleanup(Containerd) error {
 	defer t.doneFunc(t.ctx)
 	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
 	if err != nil && !errdefs.IsNotFound(err) {

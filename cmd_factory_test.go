@@ -24,7 +24,7 @@ func Test_convertMounts_Docker(t *testing.T) {
 	assert.Equal(t, expected, actual[0])
 }
 
-func Test_convertMounts_ContainerD(t *testing.T) {
+func Test_convertMounts_Containerd(t *testing.T) {
 	actual := convertMounts[specs.Mount](getMounts())
 	assert.Len(t, actual, 1)
 	expected := specs.Mount{Type: "bind", Source: "/local/path", Destination: "/go/src", Options: []string{"bind"}}

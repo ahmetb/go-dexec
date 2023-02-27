@@ -34,9 +34,9 @@ func TestDexecDockerCommandMatchesInterface(_ *testing.T) {
 	_ = c
 }
 
-func TestDexecContainerDCommandMatchesInterface(_ *testing.T) {
+func TestDexecContainerdCommandMatchesInterface(_ *testing.T) {
 	var c cmd
-	v := new(dexec.ContainerDCmd)
+	v := new(dexec.ContainerdCmd)
 	c = v // compile error
 	_ = c
 }
