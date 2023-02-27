@@ -141,26 +141,6 @@ func (g *GenericCmd[T]) Start() error {
 	return nil
 }
 
-func (g *GenericCmd[T]) CombinedOutput() ([]byte, error) {
-	if g.Stdout != nil {
-		return nil, errors.New("dexec: Stdout already set")
-	}
-	if g.Stderr != nil {
-		return nil, errors.New("dexec: Stderr already set")
-	}
-	var b bytes.Buffer
-	g.Stdout, g.Stderr = &b, &b
-	err := g.Run()
-	return b.Bytes(), err
-}
-
-func (g *GenericCmd[T]) Run() error {
-	if err := g.Start(); err != nil {
-		return err
-	}
-	return g.Wait()
-}
-
 func (g *GenericCmd[T]) Wait() error {
 	defer closeFds(g.closeAfterWait)
 	if !g.started {
@@ -174,6 +154,26 @@ func (g *GenericCmd[T]) Wait() error {
 		return &ExitError{ExitCode: ec}
 	}
 	return nil
+}
+
+func (g *GenericCmd[T]) Run() error {
+	if err := g.Start(); err != nil {
+		return err
+	}
+	return g.Wait()
+}
+
+func (g *GenericCmd[T]) CombinedOutput() ([]byte, error) {
+	if g.Stdout != nil {
+		return nil, errors.New("dexec: Stdout already set")
+	}
+	if g.Stderr != nil {
+		return nil, errors.New("dexec: Stderr already set")
+	}
+	var b bytes.Buffer
+	g.Stdout, g.Stderr = &b, &b
+	err := g.Run()
+	return b.Bytes(), err
 }
 
 func (g *GenericCmd[T]) Output() ([]byte, error) {
