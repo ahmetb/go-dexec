@@ -104,6 +104,7 @@ type GenericCmd[T ContainerClient] struct {
 	client         T
 }
 
+// Start starts the specified command but does not wait for it to complete.
 func (g *GenericCmd[T]) Start() error {
 	if g.Dir != "" {
 		if err := g.Method.setDir(g.Dir); err != nil {
@@ -141,6 +142,13 @@ func (g *GenericCmd[T]) Start() error {
 	return nil
 }
 
+// Wait waits for the command to exit. It must have been started by Start.
+//
+// If the container exits with a non-zero exit code, the error is of type
+// *ExitError. Other error types may be returned for I/O problems and such.
+//
+// Different than os/exec.Wait, this method will not release any resources
+// associated with Cmd (such as file handles).
 func (g *GenericCmd[T]) Wait() error {
 	defer closeFds(g.closeAfterWait)
 	if !g.started {
@@ -156,6 +164,13 @@ func (g *GenericCmd[T]) Wait() error {
 	return nil
 }
 
+// Run starts the specified command and waits for it to complete.
+//
+// If the command runs successfully and copying streams are done as expected,
+// the error is nil.
+//
+// If the container exits with a non-zero exit code, the error is of type
+// *ExitError. Other error types may be returned for I/O problems and such.
 func (g *GenericCmd[T]) Run() error {
 	if err := g.Start(); err != nil {
 		return err
@@ -163,6 +178,12 @@ func (g *GenericCmd[T]) Run() error {
 	return g.Wait()
 }
 
+// CombinedOutput runs the command and returns its combined standard output and
+// standard error.
+//
+// Docker API does not have strong guarantees over ordering of messages. For instance:
+//     >&1 echo out; >&2 echo err
+// may result in "out\nerr\n" as well as "err\nout\n" from this method.
 func (g *GenericCmd[T]) CombinedOutput() ([]byte, error) {
 	if g.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
@@ -176,6 +197,12 @@ func (g *GenericCmd[T]) CombinedOutput() ([]byte, error) {
 	return b.Bytes(), err
 }
 
+// Output runs the command and returns its standard output.
+//
+// If the container exits with a non-zero exit code, the error is of type
+// *ExitError. Other error types may be returned for I/O problems and such.
+//
+// If c.Stderr was nil, Output populates ExitError.Stderr.
 func (g *GenericCmd[T]) Output() ([]byte, error) {
 	if g.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
@@ -247,10 +274,12 @@ func (g *GenericCmd[T]) GetPID() string {
 	return ""
 }
 
+// SetDir sets the working directory for the command
 func (g *GenericCmd[T]) SetDir(dir string) {
 	g.Dir = dir
 }
 
+// SetStderr sets the stderr writer
 func (g *GenericCmd[T]) SetStderr(writer io.Writer) {
 	g.Stderr = writer
 }
@@ -264,6 +293,7 @@ func (g *GenericCmd[T]) Kill() error {
 	return nil
 }
 
+// Cleanup cleans up any resources that were created for the command
 func (g *GenericCmd[T]) Cleanup() error {
 	return g.Method.cleanup(g.client)
 }
