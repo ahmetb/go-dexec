@@ -196,7 +196,11 @@ func (t *createTask) kill(c Containerd) error {
 // api returns a NotFound error, the error is ignored and we will return nil. otherwise, any errors encountered during
 // the cleanup operations will be returned
 func (t *createTask) cleanup(Containerd) error {
-	defer t.doneFunc(t.ctx)
+	defer func() {
+		if f := t.doneFunc; f != nil && t.ctx != nil {
+			f(t.ctx)
+		}
+	}()
 	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
 	if err != nil && !errdefs.IsNotFound(err) {
 		return errors.Wrap(err, "error deleting task")
