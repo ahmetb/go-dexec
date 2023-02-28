@@ -204,5 +204,5 @@ func (t *createTask) cleanup(Containerd) error {
 	if err = t.container.Delete(t.ctx, containerd.WithSnapshotCleanup); err == nil || errdefs.IsNotFound(err) {
 		return nil
 	}
-	return errors.Wrap(t.container.Delete(t.ctx, containerd.WithSnapshotCleanup), "error deleting container")
+	return errors.Wrap(err, "error deleting container")
 }
