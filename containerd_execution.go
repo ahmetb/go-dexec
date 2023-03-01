@@ -59,7 +59,9 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	}
 	t.ctx = ctx
 	t.doneFunc = done
-
+	// in order for this to work the image must already be pulled into the namespace or be a
+	// publicly accessible image. if we need to (re)fetch private images, we need to pass in auth to
+	// the client
 	image, err := c.GetImage(t.ctx, t.opts.Image)
 	if err != nil {
 		return errors.Wrapf(err, "error pulling image %s", t.opts.Image)
