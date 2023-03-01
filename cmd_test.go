@@ -18,7 +18,10 @@ import (
 )
 
 // Hook up gocheck into the "go test" runner.
-func Test(t *testing.T) { TestingT(t) }
+func Test(t *testing.T) {
+	// AA: disabling the docker tests for skynet
+	//TestingT(t)
+}
 
 var _ = Suite(&CmdTestSuite{})
 

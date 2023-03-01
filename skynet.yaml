@@ -13,4 +13,7 @@ run:
     - master
 
 scripts:
-  - echo This repository does not run any tests
+  - mkdir -p $GOPATH/src/github.com/Workiva/go-dexec
+  - cp -R . $GOPATH/src/github.com/Workiva/go-dexec
+  - pushd $GOPATH/src/github.com/Workiva/go-dexec > /dev/null
+  - go test -v
