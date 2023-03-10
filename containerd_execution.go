@@ -52,7 +52,7 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	// the default containerd settings makes things eligible for garbage collection after 24 hours
 	// since we are spinning up hundreds of thousands of tasks per day, let's set a shorter expiration
 	// so we can try and be good netizens
-	ctx := namespaces.WithNamespace(context.Background(), c.Namespace)
+	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
 	ctx, done, err := c.WithLease(ctx, leases.WithExpiration(expiration), leases.WithRandomID())
 	if err != nil {
 		return errors.Wrap(err, "error creating containerd context")

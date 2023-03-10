@@ -5,7 +5,9 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 type fakeClient struct {
@@ -39,8 +41,23 @@ func TestCommand(t *testing.T) {
 	cmd := Command(&docker.Client{}, Config{})
 	assert.IsType(t, &DockerCmd{}, cmd)
 
-	cmd = Command(&containerd.Client{}, Config{})
+	// AA: this is dirty, but this is the only way we can set the
+	// default namespace on the client without having a working
+	// containerd socket to connect to
+	cdClient := &containerd.Client{}
+	pointerVal := reflect.ValueOf(cdClient)
+	val := reflect.Indirect(pointerVal)
+	defaultns := val.FieldByName("defaultns")
+	ptrToDefaultNs := unsafe.Pointer(defaultns.UnsafeAddr())
+	realPtrToDefaultNs := (*string)(ptrToDefaultNs)
+	*realPtrToDefaultNs = "unit-test"
+
+	cmd = Command(cdClient, Config{})
 	assert.IsType(t, &ContainerdCmd{}, cmd)
+
+	assert.Panics(t, func() {
+		Command(&containerd.Client{}, Config{})
+	})
 
 	assert.Panics(t, func() {
 		Command(&fakeClient{}, Config{})

@@ -3,7 +3,6 @@ package dexec
 import "time"
 
 type Config struct {
-	Namespace       string
 	ContainerConfig ContainerConfig
 	NetworkConfig   NetworkConfig
 	TaskConfig      TaskConfig

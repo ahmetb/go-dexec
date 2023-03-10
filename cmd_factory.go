@@ -2,6 +2,7 @@ package dexec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/containerd/containerd"
 	docker "github.com/fsouza/go-dockerclient"
@@ -15,7 +16,10 @@ func Command(client interface{}, config Config) Cmd {
 		execution := getDockerExecution(config)
 		return dc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 	case *containerd.Client:
-		cdc := Containerd{Client: c, Namespace: config.Namespace}
+		if c.DefaultNamespace() == "" {
+			panic(errors.New("containerd client must have default namespace set"))
+		}
+		cdc := Containerd{Client: c}
 		execution := getContainerdExecution(config)
 		return cdc.Command(execution, config.TaskConfig.Executable, config.TaskConfig.Args...)
 	default:
