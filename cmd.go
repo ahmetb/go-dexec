@@ -5,33 +5,70 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-
-	"github.com/fsouza/go-dockerclient"
 )
 
-// Docker contains connection to Docker API.
-// Use github.com/fsouza/go-dockerclient to initialize *docker.Client.
-type Docker struct {
-	*docker.Client
+type Cmd interface {
+	// StdoutPipe returns a pipe that will be connected to the command's standard output when
+	// the command starts.
+	//
+	// Wait will close the pipe after seeing the command exit or in error conditions.
+	StdoutPipe() (io.ReadCloser, error)
+	// StderrPipe returns a pipe that will be connected to the command's standard error when
+	// the command starts.
+	//
+	// Wait will close the pipe after seeing the command exit or in error conditions.
+	StderrPipe() (io.ReadCloser, error)
+	// SetStderr sets the stderr writer
+	SetStderr(writer io.Writer)
+	// StdinPipe returns a pipe that will be connected to the command's standard input
+	// when the command starts.
+	//
+	// Different than os/exec.StdinPipe, returned io.WriteCloser should be closed by user.
+	StdinPipe() (io.WriteCloser, error)
+	// GetPID will return a unique identifier for the running command. The meaning of the identifier
+	// may be implementation specific
+	GetPID() string
+	// Start starts the specified command but does not wait for it to complete.
+	Start() error
+	// Wait waits for the command to exit. It must have been started by Start.
+	//
+	// If the container exits with a non-zero exit code, the error is of type
+	// *ExitError. Other error types may be returned for I/O problems and such.
+	//
+	// Different than os/exec.Wait, this method will not release any resources
+	// associated with Cmd (such as file handles).
+	Wait() error
+	// Kill will stop a running command
+	Kill() error
+	// Run starts the specified command and waits for it to complete.
+	//
+	// If the command runs successfully and copying streams are done as expected,
+	// the error is nil.
+	//
+	// If the container exits with a non-zero exit code, the error is of type
+	// *ExitError. Other error types may be returned for I/O problems and such.
+	Run() error
+	// Output runs the command and returns its standard output.
+	//
+	// If the container exits with a non-zero exit code, the error is of type
+	// *ExitError. Other error types may be returned for I/O problems and such.
+	//
+	// If c.Stderr was nil, Output populates ExitError.Stderr.
+	Output() ([]byte, error)
+	// CombinedOutput runs the command and returns its combined standard output and
+	// standard error.
+	//
+	// Docker API does not have strong guarantees over ordering of messages. For instance:
+	//     >&1 echo out; >&2 echo err
+	// may result in "out\nerr\n" as well as "err\nout\n" from this method.
+	CombinedOutput() ([]byte, error)
+	// SetDir sets the working directory for the command
+	SetDir(dir string)
+	// Cleanup cleans up any resources that were created for the command
+	Cleanup() error
 }
 
-// Command returns the Cmd struct to execute the named program with given
-// arguments using specified execution method.
-//
-// For each new Cmd, you should create a new instance for "method" argument.
-func (d Docker) Command(method Execution, name string, arg ...string) *Cmd {
-	return &Cmd{Method: method, Path: name, Args: arg, docker: d}
-}
-
-// Cmd represents an external command being prepared or run.
-//
-// A Cmd cannot be reused after calling its Run, Output or CombinedOutput
-// methods.
-type Cmd struct {
-	// Method provides the execution strategy for the context of the Cmd.
-	// An instance of Method should not be reused between Cmds.
-	Method Execution
-
+type GenericCmd[T ContainerClient] struct {
 	// Path is the path or name of the command in the container.
 	Path string
 
@@ -59,47 +96,47 @@ type Cmd struct {
 	//
 	// Run will not close the underlying handles if they are *os.File differently
 	// than os/exec.
-	Stdout io.Writer
-	Stderr io.Writer
-
-	docker         Docker
+	Stdout         io.Writer
+	Stderr         io.Writer
 	started        bool
+	Method         Execution[T]
 	closeAfterWait []io.Closer
+	client         T
 }
 
 // Start starts the specified command but does not wait for it to complete.
-func (c *Cmd) Start() error {
-	if c.Dir != "" {
-		if err := c.Method.setDir(c.Dir); err != nil {
+func (g *GenericCmd[T]) Start() error {
+	if g.Dir != "" {
+		if err := g.Method.setDir(g.Dir); err != nil {
 			return err
 		}
 	}
-	if c.Env != nil {
-		if err := c.Method.setEnv(c.Env); err != nil {
+	if g.Env != nil {
+		if err := g.Method.setEnv(g.Env); err != nil {
 			return err
 		}
 	}
 
-	if c.started {
+	if g.started {
 		return errors.New("dexec: already started")
 	}
-	c.started = true
+	g.started = true
 
-	if c.Stdin == nil {
-		c.Stdin = empty
+	if g.Stdin == nil {
+		g.Stdin = empty
 	}
-	if c.Stdout == nil {
-		c.Stdout = ioutil.Discard
+	if g.Stdout == nil {
+		g.Stdout = ioutil.Discard
 	}
-	if c.Stderr == nil {
-		c.Stderr = ioutil.Discard
+	if g.Stderr == nil {
+		g.Stderr = ioutil.Discard
 	}
 
-	cmd := append([]string{c.Path}, c.Args...)
-	if err := c.Method.create(c.docker, cmd); err != nil {
+	cmd := append([]string{g.Path}, g.Args...)
+	if err := g.Method.create(g.client, cmd); err != nil {
 		return err
 	}
-	if err := c.Method.run(c.docker, c.Stdin, c.Stdout, c.Stderr); err != nil {
+	if err := g.Method.run(g.client, g.Stdin, g.Stdout, g.Stderr); err != nil {
 		return err
 	}
 	return nil
@@ -112,12 +149,12 @@ func (c *Cmd) Start() error {
 //
 // Different than os/exec.Wait, this method will not release any resources
 // associated with Cmd (such as file handles).
-func (c *Cmd) Wait() error {
-	defer closeFds(c.closeAfterWait)
-	if !c.started {
+func (g *GenericCmd[T]) Wait() error {
+	defer closeFds(g.closeAfterWait)
+	if !g.started {
 		return errors.New("dexec: not started")
 	}
-	ec, err := c.Method.wait(c.docker)
+	ec, err := g.Method.wait(g.client)
 	if err != nil {
 		return err
 	}
@@ -134,11 +171,11 @@ func (c *Cmd) Wait() error {
 //
 // If the container exits with a non-zero exit code, the error is of type
 // *ExitError. Other error types may be returned for I/O problems and such.
-func (c *Cmd) Run() error {
-	if err := c.Start(); err != nil {
+func (g *GenericCmd[T]) Run() error {
+	if err := g.Start(); err != nil {
 		return err
 	}
-	return c.Wait()
+	return g.Wait()
 }
 
 // CombinedOutput runs the command and returns its combined standard output and
@@ -147,16 +184,16 @@ func (c *Cmd) Run() error {
 // Docker API does not have strong guarantees over ordering of messages. For instance:
 //     >&1 echo out; >&2 echo err
 // may result in "out\nerr\n" as well as "err\nout\n" from this method.
-func (c *Cmd) CombinedOutput() ([]byte, error) {
-	if c.Stdout != nil {
+func (g *GenericCmd[T]) CombinedOutput() ([]byte, error) {
+	if g.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
 	}
-	if c.Stderr != nil {
+	if g.Stderr != nil {
 		return nil, errors.New("dexec: Stderr already set")
 	}
 	var b bytes.Buffer
-	c.Stdout, c.Stderr = &b, &b
-	err := c.Run()
+	g.Stdout, g.Stderr = &b, &b
+	err := g.Run()
 	return b.Bytes(), err
 }
 
@@ -166,18 +203,18 @@ func (c *Cmd) CombinedOutput() ([]byte, error) {
 // *ExitError. Other error types may be returned for I/O problems and such.
 //
 // If c.Stderr was nil, Output populates ExitError.Stderr.
-func (c *Cmd) Output() ([]byte, error) {
-	if c.Stdout != nil {
+func (g *GenericCmd[T]) Output() ([]byte, error) {
+	if g.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
 	}
 	var stdout, stderr bytes.Buffer
-	c.Stdout = &stdout
+	g.Stdout = &stdout
 
-	captureErr := c.Stderr == nil
+	captureErr := g.Stderr == nil
 	if captureErr {
-		c.Stderr = &stderr
+		g.Stderr = &stderr
 	}
-	err := c.Run()
+	err := g.Run()
 	if err != nil && captureErr {
 		if ee, ok := err.(*ExitError); ok {
 			ee.Stderr = stderr.Bytes()
@@ -190,12 +227,12 @@ func (c *Cmd) Output() ([]byte, error) {
 // when the command starts.
 //
 // Different than os/exec.StdinPipe, returned io.WriteCloser should be closed by user.
-func (c *Cmd) StdinPipe() (io.WriteCloser, error) {
-	if c.Stdin != nil {
+func (g *GenericCmd[T]) StdinPipe() (io.WriteCloser, error) {
+	if g.Stdin != nil {
 		return nil, errors.New("dexec: Stdin already set")
 	}
 	pr, pw := io.Pipe()
-	c.Stdin = pr
+	g.Stdin = pr
 	return pw, nil
 }
 
@@ -203,13 +240,13 @@ func (c *Cmd) StdinPipe() (io.WriteCloser, error) {
 // the command starts.
 //
 // Wait will close the pipe after seeing the command exit or in error conditions.
-func (c *Cmd) StdoutPipe() (io.ReadCloser, error) {
-	if c.Stdout != nil {
+func (g *GenericCmd[T]) StdoutPipe() (io.ReadCloser, error) {
+	if g.Stdout != nil {
 		return nil, errors.New("dexec: Stdout already set")
 	}
 	pr, pw := io.Pipe()
-	c.Stdout = pw
-	c.closeAfterWait = append(c.closeAfterWait, pw)
+	g.Stdout = pw
+	g.closeAfterWait = append(g.closeAfterWait, pw)
 	return pr, nil
 }
 
@@ -217,33 +254,48 @@ func (c *Cmd) StdoutPipe() (io.ReadCloser, error) {
 // the command starts.
 //
 // Wait will close the pipe after seeing the command exit or in error conditions.
-func (c *Cmd) StderrPipe() (io.ReadCloser, error) {
-	if c.Stderr != nil {
+func (g *GenericCmd[T]) StderrPipe() (io.ReadCloser, error) {
+	if g.Stderr != nil {
 		return nil, errors.New("dexec: Stderr already set")
 	}
 	pr, pw := io.Pipe()
-	c.Stderr = pw
-	c.closeAfterWait = append(c.closeAfterWait, pw)
+	g.Stderr = pw
+	g.closeAfterWait = append(g.closeAfterWait, pw)
 	return pr, nil
 }
 
 // GetPID will return the container ID of the Cmd's running container.  This is useful
-// for when we need to kill the process before completion or store its container ID
-func (c *Cmd) GetPID() string {
-	if c.started {
-		return c.Method.getID()
+// for when we need to cleanup the process before completion or store its container ID
+func (g *GenericCmd[T]) GetPID() string {
+	if g.started {
+		return g.Method.getID()
 	}
 
 	return ""
 }
 
+// SetDir sets the working directory for the command
+func (g *GenericCmd[T]) SetDir(dir string) {
+	g.Dir = dir
+}
+
+// SetStderr sets the stderr writer
+func (g *GenericCmd[T]) SetStderr(writer io.Writer) {
+	g.Stderr = writer
+}
+
 // Kill will stop a running container
-func (c *Cmd) Kill() error {
-	if c.started {
-		return c.docker.StopContainer(c.Method.getID(), 1)
+func (g *GenericCmd[T]) Kill() error {
+	if g.started {
+		return g.Method.kill(g.client)
 	}
 
 	return nil
+}
+
+// Cleanup cleans up any resources that were created for the command
+func (g *GenericCmd[T]) Cleanup() error {
+	return g.Method.cleanup(g.client)
 }
 
 func closeFds(l []io.Closer) {
