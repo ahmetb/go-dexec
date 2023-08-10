@@ -37,8 +37,10 @@ func getDockerExecution(config Config) Execution[Docker] {
 			Env:          config.ContainerConfig.Env,
 		},
 		HostConfig: &docker.HostConfig{
-			DNS:    config.NetworkConfig.DNS,
-			Mounts: convertMounts[docker.HostMount](config.ContainerConfig.Mounts),
+			DNS:        config.NetworkConfig.DNS,
+			DNSSearch:  config.NetworkConfig.DNSSearch,
+			DNSOptions: config.NetworkConfig.DNSOptions,
+			Mounts:     convertMounts[docker.HostMount](config.ContainerConfig.Mounts),
 		},
 		Context: context.Background(),
 	})

@@ -31,7 +31,9 @@ type TaskConfig struct {
 }
 
 type NetworkConfig struct {
-	DNS []string
+	DNS        []string
+	DNSSearch  []string
+	DNSOptions []string
 }
 
 type CommandDetails struct {
