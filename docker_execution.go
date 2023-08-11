@@ -1,11 +1,8 @@
 package dexec
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"io"
 
 	"github.com/fsouza/go-dockerclient"
@@ -79,18 +76,6 @@ func (c *createContainer) run(d Docker, stdin io.Reader, stdout, stderr io.Write
 	}
 	if err := d.Client.StartContainer(c.id, nil); err != nil {
 		return fmt.Errorf("dexec: failed to start container:  %v", err)
-	}
-
-	i, err := d.Client.InspectContainerWithOptions(docker.InspectContainerOptions{Context: context.Background(), ID: c.id, Size: false})
-	if err == nil {
-		j, err := json.Marshal(i)
-		if err == nil {
-			logrus.Infof("container definition: %s", string(j))
-		} else {
-			logrus.Warnf("error converting definition to json: %v", err)
-		}
-	} else {
-		logrus.Warnf("error getting container definition: %v", err)
 	}
 
 	opts := docker.AttachToContainerOptions{
