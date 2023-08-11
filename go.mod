@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/containerd/containerd v1.7.3
-	github.com/fsouza/go-dockerclient v1.9.4
+	github.com/fsouza/go-dockerclient v1.9.8
 	github.com/opencontainers/runtime-spec v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.4
@@ -24,7 +24,7 @@ require (
 	github.com/containerd/typeurl/v2 v2.1.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/docker/docker v23.0.3+incompatible // indirect
+	github.com/docker/docker v24.0.5+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
 	github.com/docker/go-units v0.5.0 // indirect
@@ -59,7 +59,7 @@ require (
 	golang.org/x/mod v0.9.0 // indirect
 	golang.org/x/net v0.8.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
-	golang.org/x/sys v0.7.0 // indirect
+	golang.org/x/sys v0.11.0 // indirect
 	golang.org/x/text v0.8.0 // indirect
 	golang.org/x/tools v0.7.0 // indirect
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4 // indirect
