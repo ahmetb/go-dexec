@@ -1,16 +1,11 @@
 package dexec
 
 import (
-	"context"
 	"fmt"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
 	"io"
 
 	"github.com/fsouza/go-dockerclient"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type createContainer struct {
@@ -50,70 +45,28 @@ func (c *createContainer) setDir(dir string) error {
 
 func (c *createContainer) create(d Docker, cmd []string) error {
 	c.cmd = cmd
+
 	if len(c.opt.Config.Cmd) > 0 {
 		return errors.New("dexec: Config.Cmd already set")
 	}
 	if len(c.opt.Config.Entrypoint) > 0 {
 		return errors.New("dexec: Config.Entrypoint already set")
 	}
-	if true {
-		cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-		if err != nil {
-			return err
-		}
-		defer cli.Close()
-		containerConfig := &container.Config{
-			Image:        c.opt.Config.Image,
-			User:         c.opt.Config.User,
-			Env:          c.opt.Config.Env,
-			AttachStdin:  true,
-			AttachStdout: true,
-			AttachStderr: true,
-			OpenStdin:    true,
-			StdinOnce:    true,
-			Cmd:          nil,
-			Entrypoint:   cmd,
-		}
-		mounts := make([]mount.Mount, 0)
-		for _, mnt := range c.opt.HostConfig.Mounts {
-			m := mount.Mount{
-				Type:   mount.Type(mnt.Type),
-				Source: mnt.Source,
-				Target: mnt.Target,
-			}
-			mounts = append(mounts, m)
-		}
-		hostConfig := &container.HostConfig{
-			DNS:        c.opt.HostConfig.DNS,
-			DNSSearch:  c.opt.HostConfig.DNSSearch,
-			DNSOptions: c.opt.HostConfig.DNSOptions,
-			Mounts:     mounts,
-		}
-		platform := &ocispec.Platform{
-			Architecture: "amd64",
-			OS:           "linux",
-		}
 
-		res, err := cli.ContainerCreate(context.Background(), containerConfig, hostConfig, nil, platform, "")
-		if err != nil {
-			return fmt.Errorf("d: failed to create container: %w", err)
-		}
-		c.id = res.ID
-	} else {
-		c.opt.Config.AttachStdin = true
-		c.opt.Config.AttachStdout = true
-		c.opt.Config.AttachStderr = true
-		c.opt.Config.OpenStdin = true
-		c.opt.Config.StdinOnce = true
-		c.opt.Config.Cmd = nil        // clear cmd
-		c.opt.Config.Entrypoint = cmd // set new entrypoint
-		container, err := d.Client.CreateContainer(c.opt)
-		if err != nil {
-			return fmt.Errorf("dexec: failed to create container: %v", err)
-		}
+	c.opt.Config.AttachStdin = true
+	c.opt.Config.AttachStdout = true
+	c.opt.Config.AttachStderr = true
+	c.opt.Config.OpenStdin = true
+	c.opt.Config.StdinOnce = true
+	c.opt.Config.Cmd = nil        // clear cmd
+	c.opt.Config.Entrypoint = cmd // set new entrypoint
 
-		c.id = container.ID
+	container, err := d.Client.CreateContainer(c.opt)
+	if err != nil {
+		return fmt.Errorf("dexec: failed to create container: %v", err)
 	}
+
+	c.id = container.ID
 	return nil
 }
 
