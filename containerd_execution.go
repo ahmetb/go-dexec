@@ -132,7 +132,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err != nil {
 		return errors.Wrap(err, "error creating process")
 	} else {
-		logrus.Infof("successfully exec'd process %s", ps.ID())
+		logrus.Infof("successfully exec'd process %s: %v", ps.ID(), spec.Args)
 	}
 	t.process = ps
 
