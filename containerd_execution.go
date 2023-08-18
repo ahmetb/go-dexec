@@ -11,6 +11,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"io"
 	"strconv"
 	"time"
@@ -71,6 +72,8 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	container, err := t.createContainer(c)
 	if err != nil {
 		return errors.Wrap(err, "error creating container")
+	} else {
+		logrus.Infof("successfully created container %s", container.ID())
 	}
 	t.container = container
 
@@ -114,6 +117,8 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	task, err := t.createTask(opts...)
 	if err != nil {
 		return errors.Wrap(err, "error creating task")
+	} else {
+		logrus.Infof("successfully created task %s", task.ID())
 	}
 
 	t.task = task
@@ -126,6 +131,8 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	ps, err := task.Exec(t.ctx, taskId, spec, cio.NewCreator(opts...))
 	if err != nil {
 		return errors.Wrap(err, "error creating process")
+	} else {
+		logrus.Infof("successfully exec'd process %s", ps.ID())
 	}
 	t.process = ps
 
@@ -133,10 +140,16 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	t.exitChan, err = ps.Wait(t.ctx)
 	if err != nil {
 		return errors.Wrap(err, "error waiting for process")
+	} else {
+		logrus.Infof("successfully got exit channel")
 	}
 
-	err = ps.Start(t.ctx)
-	return errors.Wrap(err, "error starting process")
+	if err = ps.Start(t.ctx); err != nil {
+		errors.Wrap(err, "error starting process")
+	} else {
+		logrus.Infof("successfully started process %s", ps.ID())
+	}
+	return nil
 }
 
 func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
@@ -165,6 +178,7 @@ func (t *createTask) wait(c Containerd) (int, error) {
 	defer t.cleanup(c)
 
 	exitStatus := <-t.exitChan
+	logrus.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
 	return int(exitStatus.ExitCode()), exitStatus.Error()
 }
 
