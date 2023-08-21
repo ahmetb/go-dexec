@@ -145,7 +145,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	}
 
 	if err = ps.Start(t.ctx); err != nil {
-		errors.Wrap(err, "error starting process")
+		return errors.Wrap(err, "error starting process")
 	} else {
 		logrus.Infof("successfully started process %s", ps.ID())
 	}
