@@ -180,8 +180,7 @@ func (t *createTask) createProcessSpec() (*specs.Process, error) {
 
 	spec.Process.Args = t.cmd
 	spec.Process.Cwd = t.opts.WorkingDir
-	uid, err := strconv.ParseInt(t.opts.User, 10, 64)
-	if err == nil {
+	if uid, err := strconv.ParseInt(t.opts.User, 10, 64); err == nil {
 		spec.Process.User.UID = uint32(uid)
 	}
 	return spec.Process, nil
