@@ -2,6 +2,7 @@ package dexec
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
@@ -72,6 +73,13 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	t.image = image
 
 	container, err := t.createContainer(c)
+	if err == nil {
+		s, _ := container.Spec(t.ctx)
+		if js, err := json.Marshal(s); err == nil {
+			t.logger.Infof("container spec: %s", string(js))
+		}
+	}
+
 	if err != nil {
 		return errors.Wrap(err, "error creating container")
 	} else {
