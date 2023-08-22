@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
+	"github.com/containerd/containerd/contrib/seccomp"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
@@ -96,7 +97,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 
 	specOpts := []oci.SpecOpts{oci.WithDefaultSpec()}
 	specOpts = append(specOpts, t.createUserOpts()...)
-	specOpts = append(specOpts, oci.WithDefaultUnixDevices, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts))
+	specOpts = append(specOpts, oci.WithDefaultUnixDevices, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts), seccomp.WithDefaultProfile())
 
 	return c.NewContainer(
 		t.ctx,
