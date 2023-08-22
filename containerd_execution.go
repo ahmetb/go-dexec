@@ -86,7 +86,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	containerId := t.generateContainerId()
 	snapshotName := fmt.Sprintf("%s-snapshot", containerId)
 
-	specOpts := make([]oci.SpecOpts, 0)
+	specOpts := []oci.SpecOpts{oci.WithDefaultSpec()}
 	specOpts = append(specOpts, t.createUserOpts()...)
 	specOpts = append(specOpts, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts))
 
