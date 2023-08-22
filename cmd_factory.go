@@ -56,7 +56,7 @@ func getContainerdExecution(config Config) Execution[Containerd] {
 		CommandTimeout: config.TaskConfig.Timeout,
 		WorkingDir:     config.TaskConfig.WorkingDir,
 		CommandDetails: config.CommandDetails,
-	})
+	}, config.Logger)
 	return exec
 }
 

@@ -30,8 +30,8 @@ type CreateTaskOptions struct {
 	CommandDetails CommandDetails
 }
 
-func ByCreatingTask(opts CreateTaskOptions) (Execution[Containerd], error) {
-	return &createTask{opts: opts}, nil
+func ByCreatingTask(opts CreateTaskOptions, logger *logrus.Entry) (Execution[Containerd], error) {
+	return &createTask{opts: opts, logger: logger}, nil
 }
 
 type createTask struct {
@@ -45,6 +45,7 @@ type createTask struct {
 	process   containerd.Process
 	exitChan  <-chan containerd.ExitStatus
 	tmpDir    string
+	logger    *logrus.Entry
 }
 
 func (t *createTask) create(c Containerd, cmd []string) error {
@@ -128,7 +129,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err != nil {
 		return errors.Wrap(err, "error creating task")
 	} else {
-		logrus.Infof("successfully created task %s", task.ID())
+		t.logger.Infof("successfully created task %s", task.ID())
 	}
 
 	t.task = task
@@ -142,7 +143,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err != nil {
 		return errors.Wrap(err, "error creating process")
 	} else {
-		logrus.Infof("successfully exec'd process %s: %v", ps.ID(), spec.Args)
+		t.logger.Infof("successfully exec'd process %s: %v", ps.ID(), spec.Args)
 	}
 	t.process = ps
 
@@ -151,21 +152,23 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err != nil {
 		return errors.Wrap(err, "error waiting for process")
 	} else {
-		logrus.Infof("successfully got exit channel")
+		t.logger.Info("successfully got exit channel")
 	}
 
 	if err = ps.Start(t.ctx); err != nil {
 		return errors.Wrap(err, "error starting process")
 	} else {
-		logrus.Infof("successfully started process %s", ps.ID())
+		t.logger.Infof("successfully started process %s", ps.ID())
 	}
 	return nil
 }
 
 func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
 	if task, err := t.container.Task(t.ctx, cio.NewAttach(opts...)); err == nil {
+		t.logger.Info("Using existing task")
 		return task, nil
 	}
+	t.logger.Info("Using new task")
 	return t.container.NewTask(t.ctx, cio.NewCreator(opts...))
 }
 
@@ -188,7 +191,7 @@ func (t *createTask) wait(c Containerd) (int, error) {
 	defer t.cleanup(c)
 
 	exitStatus := <-t.exitChan
-	logrus.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
+	t.logger.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
 	return int(exitStatus.ExitCode()), exitStatus.Error()
 }
 

@@ -1,12 +1,16 @@
 package dexec
 
-import "time"
+import (
+	"github.com/sirupsen/logrus"
+	"time"
+)
 
 type Config struct {
 	ContainerConfig ContainerConfig
 	NetworkConfig   NetworkConfig
 	TaskConfig      TaskConfig
 	CommandDetails  CommandDetails
+	Logger          *logrus.Entry
 }
 
 type Mount struct {
