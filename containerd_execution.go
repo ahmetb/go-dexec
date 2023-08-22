@@ -88,7 +88,7 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 
 	specOpts := []oci.SpecOpts{oci.WithDefaultSpec()}
 	specOpts = append(specOpts, t.createUserOpts()...)
-	specOpts = append(specOpts, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts))
+	specOpts = append(specOpts, oci.WithDefaultUnixDevices, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts))
 
 	return c.NewContainer(
 		t.ctx,
