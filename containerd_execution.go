@@ -11,6 +11,8 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/pkg/netns"
+	cni "github.com/containerd/go-cni"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -48,6 +50,8 @@ type createTask struct {
 	exitChan  <-chan containerd.ExitStatus
 	tmpDir    string
 	logger    *logrus.Entry
+	net       *netns.NetNS
+	cni       cni.CNI
 }
 
 func (t *createTask) create(c Containerd, cmd []string) error {
@@ -164,11 +168,49 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 		t.logger.Infof("successfully got exit channel, task pid = %d", task.Pid())
 	}
 
+	if err = t.setupNetwork(); err != nil {
+		return fmt.Errorf("error setting up the network: %w", err)
+	}
+
 	if err = ps.Start(t.ctx); err != nil {
 		return errors.Wrap(err, "error starting process")
 	} else {
 		t.logger.Infof("successfully started process %s", ps.ID())
 	}
+	return nil
+}
+
+func (t *createTask) setupNetwork() error {
+	var err error
+	t.net, err = netns.NewNetNSFromPID("/var/run/netns", t.task.Pid())
+	if err != nil {
+		return fmt.Errorf("error creating network for task %s: %w", t.task.ID(), err)
+	}
+
+	spec, err := t.container.Spec(t.ctx)
+	if err != nil {
+		return fmt.Errorf("error gettinc container spec for container %s: %w", t.container.ID(), err)
+	}
+
+	for i := range spec.Linux.Namespaces {
+		if spec.Linux.Namespaces[i].Type == specs.NetworkNamespace {
+			spec.Linux.Namespaces[i].Path = t.net.GetPath()
+			break
+		}
+	}
+	if err = t.container.Update(t.ctx, containerd.UpdateContainerOpts(containerd.WithSpec(spec))); err != nil {
+		return fmt.Errorf("error updating the network namespace for container %s: %w", t.container.ID(), err)
+	}
+
+	t.cni, err = cni.New(cni.WithDefaultConf, cni.WithPluginDir([]string{"/opt/cni/bin"}), cni.WithPluginConfDir("/etc/cni/net.d"))
+	if err != nil {
+		return fmt.Errorf("error creating cni: %w", err)
+	}
+
+	if _, err = t.cni.Setup(t.ctx, t.container.ID(), t.net.GetPath()); err != nil {
+		return fmt.Errorf("error setting up cni: %w", err)
+	}
+	t.logger.Info("setup network for container %s", t.container.ID())
 	return nil
 }
 
@@ -257,6 +299,11 @@ func (t *createTask) cleanup(Containerd) error {
 			f(t.ctx)
 		}
 	}()
+	if t.cni != nil && t.net != nil {
+		if err := t.cni.Remove(t.ctx, t.container.ID(), t.net.GetPath()); err != nil {
+			t.logger.Warnf("error removing network: %v", err)
+		}
+	}
 	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
 	if err != nil && !errdefs.IsNotFound(err) {
 		return errors.Wrap(err, "error deleting task")
