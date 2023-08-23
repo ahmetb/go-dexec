@@ -168,9 +168,9 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 		t.logger.Infof("successfully got exit channel, task pid = %d", task.Pid())
 	}
 
-	if err = t.setupNetwork(); err != nil {
+	/*if err = t.setupNetwork(); err != nil {
 		return fmt.Errorf("error setting up the network: %w", err)
-	}
+	}*/
 
 	if err = ps.Start(t.ctx); err != nil {
 		return errors.Wrap(err, "error starting process")
