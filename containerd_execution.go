@@ -11,8 +11,6 @@ import (
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
 	"github.com/containerd/containerd/oci"
-	"github.com/containerd/containerd/pkg/netns"
-	cni "github.com/containerd/go-cni"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -51,8 +49,6 @@ type createTask struct {
 	exitChan  <-chan containerd.ExitStatus
 	tmpDir    string
 	logger    *logrus.Entry
-	net       *netns.NetNS
-	cni       cni.CNI
 }
 
 func (t *createTask) create(c Containerd, cmd []string) error {
@@ -270,11 +266,6 @@ func (t *createTask) cleanup(Containerd) error {
 			f(t.ctx)
 		}
 	}()
-	if t.cni != nil && t.net != nil {
-		if err := t.cni.Remove(t.ctx, t.container.ID(), t.net.GetPath()); err != nil {
-			t.logger.Warnf("error removing network: %v", err)
-		}
-	}
 	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
 	if err != nil && !errdefs.IsNotFound(err) {
 		return fmt.Errorf("error deleting task: %w", err)
