@@ -212,17 +212,6 @@ func (t *createTask) wait(c Containerd) (int, error) {
 		case exitStatus := <-t.exitChan:
 			t.logger.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
 			return int(exitStatus.ExitCode()), exitStatus.Error()
-		case <-time.After(1 * time.Second):
-			status, err := t.process.Status(t.ctx)
-			logrus.Infof("process status: %v", status.Status)
-			if err == nil && status.Status == containerd.Stopped {
-				t.logger.Warnf("process stopped but didn't receive on channel: %v", status)
-				status2, err2 := t.task.Delete(t.ctx, containerd.WithProcessKill)
-				t.logger.Infof("status2: %v, err2: %v", status2, err2)
-				return int(status.ExitStatus), nil
-			} else if err != nil {
-				t.logger.Warnf("error getting process status: %v", err)
-			}
 		case <-t.ctx.Done():
 			t.logger.Warn("context cancelled before completing process")
 			return -1, context.Canceled
