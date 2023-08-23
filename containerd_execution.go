@@ -3,7 +3,6 @@ package dexec
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
@@ -80,12 +79,6 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	t.image = image
 
 	container, err := t.createContainer(c)
-	if err == nil {
-		s, _ := container.Spec(t.ctx)
-		if js, err := json.Marshal(s); err == nil {
-			t.logger.Infof("container spec: %s", string(js))
-		}
-	}
 
 	if err != nil {
 		return errors.Wrap(err, "error creating container")
@@ -99,10 +92,8 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
 	nerdctlArgs := t.buildCreateContainerCmd(c)
-	t.logger.Infof("executing nerdctl: %v", nerdctlArgs)
 	stdout := &bytes.Buffer{}
 	stdErr := &bytes.Buffer{}
-	t.logger.Infof("executing nerdctl with args %v", nerdctlArgs)
 	cmd := exec.Command("nerdctl", nerdctlArgs...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdErr
@@ -186,49 +177,11 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 		t.logger.Infof("successfully got exit channel, task pid = %d", task.Pid())
 	}
 
-	/*if err = t.setupNetwork(); err != nil {
-		return fmt.Errorf("error setting up the network: %w", err)
-	}*/
-
 	if err = ps.Start(t.ctx); err != nil {
 		return errors.Wrap(err, "error starting process")
 	} else {
 		t.logger.Infof("successfully started process %s", ps.ID())
 	}
-	return nil
-}
-
-func (t *createTask) setupNetwork() error {
-	var err error
-	t.net, err = netns.NewNetNSFromPID("/var/run/netns", t.task.Pid())
-	if err != nil {
-		return fmt.Errorf("error creating network for task %s: %w", t.task.ID(), err)
-	}
-
-	spec, err := t.container.Spec(t.ctx)
-	if err != nil {
-		return fmt.Errorf("error gettinc container spec for container %s: %w", t.container.ID(), err)
-	}
-
-	for i := range spec.Linux.Namespaces {
-		if spec.Linux.Namespaces[i].Type == specs.NetworkNamespace {
-			spec.Linux.Namespaces[i].Path = t.net.GetPath()
-			break
-		}
-	}
-	if err = t.container.Update(t.ctx, containerd.UpdateContainerOpts(containerd.WithSpec(spec))); err != nil {
-		return fmt.Errorf("error updating the network namespace for container %s: %w", t.container.ID(), err)
-	}
-
-	t.cni, err = cni.New(cni.WithDefaultConf, cni.WithPluginDir([]string{"/opt/cni/bin"}), cni.WithPluginConfDir("/etc/cni/net.d"))
-	if err != nil {
-		return fmt.Errorf("error creating cni: %w", err)
-	}
-
-	if _, err = t.cni.Setup(t.ctx, t.container.ID(), t.net.GetPath()); err != nil {
-		return fmt.Errorf("error setting up cni: %w", err)
-	}
-	t.logger.Info("setup network for container %s", t.container.ID())
 	return nil
 }
 
