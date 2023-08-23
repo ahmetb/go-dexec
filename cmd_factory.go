@@ -7,7 +7,6 @@ import (
 	"github.com/containerd/containerd"
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"strings"
 )
 
 func Command(client interface{}, config Config) Cmd {
@@ -29,7 +28,6 @@ func Command(client interface{}, config Config) Cmd {
 }
 
 func getDockerExecution(config Config) Execution[Docker] {
-	mounts := filterMounts[docker.HostMount](config.ContainerConfig.Mounts)
 	exec, _ := ByCreatingContainer(docker.CreateContainerOptions{
 		Config: &docker.Config{
 			Image:        config.ContainerConfig.Image,
@@ -42,7 +40,7 @@ func getDockerExecution(config Config) Execution[Docker] {
 			DNS:        config.NetworkConfig.DNS,
 			DNSSearch:  config.NetworkConfig.DNSSearch,
 			DNSOptions: config.NetworkConfig.DNSOptions,
-			Mounts:     convertMounts[docker.HostMount](mounts),
+			Mounts:     convertMounts[docker.HostMount](config.ContainerConfig.Mounts),
 		},
 		Context: context.Background(),
 	})
@@ -50,10 +48,9 @@ func getDockerExecution(config Config) Execution[Docker] {
 }
 
 func getContainerdExecution(config Config) Execution[Containerd] {
-	mounts := filterMounts[specs.Mount](config.ContainerConfig.Mounts)
 	exec, _ := ByCreatingTask(CreateTaskOptions{
 		Image:          config.ContainerConfig.Image,
-		Mounts:         convertMounts[specs.Mount](mounts),
+		Mounts:         convertMounts[specs.Mount](config.ContainerConfig.Mounts),
 		User:           config.ContainerConfig.User,
 		Env:            config.ContainerConfig.Env,
 		CommandTimeout: config.TaskConfig.Timeout,
@@ -74,23 +71,6 @@ func convertMounts[T mountable](ms []Mount) []T {
 	}
 	return mounts
 }
-
-func filterMounts[T mountable](ms []Mount) []Mount {
-	var t T
-	switch any(&t).(type) {
-	case *docker.HostMount:
-		mounts := make([]Mount, 0)
-		for _, m := range ms {
-			if !strings.Contains(m.Destination, "resolv.conf") {
-				mounts = append(mounts, m)
-			}
-		}
-		return mounts
-	default:
-		return ms
-	}
-}
-
 func convertMount[T mountable](m Mount) T {
 	var res T
 	switch v := any(&res).(type) {
