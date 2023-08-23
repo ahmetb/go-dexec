@@ -161,7 +161,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	if err != nil {
 		return errors.Wrap(err, "error waiting for process")
 	} else {
-		t.logger.Info("successfully got exit channel")
+		t.logger.Infof("successfully got exit channel, task pid = %d", task.Pid())
 	}
 
 	if err = ps.Start(t.ctx); err != nil {
