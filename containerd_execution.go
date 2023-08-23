@@ -1,12 +1,12 @@
 package dexec
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
-	"github.com/containerd/containerd/contrib/seccomp"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
@@ -18,7 +18,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 	"math"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -96,19 +98,35 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 }
 
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
-	containerId := t.generateContainerId()
-	snapshotName := fmt.Sprintf("%s-snapshot", containerId)
+	nerdctlArgs := t.buildCreateContainerCmd(c)
+	t.logger.Infof("executing nerdctl: %v", nerdctlArgs)
+	stdout := &bytes.Buffer{}
+	stdErr := &bytes.Buffer{}
+	t.logger.Infof("executing nerdctl with args %v", nerdctlArgs)
+	cmd := exec.Command("nerdctl", nerdctlArgs...)
+	cmd.Stdout = stdout
+	cmd.Stderr = stdErr
 
-	specOpts := []oci.SpecOpts{oci.WithDefaultSpec()}
-	specOpts = append(specOpts, t.createUserOpts()...)
-	specOpts = append(specOpts, oci.WithDefaultUnixDevices, oci.WithImageConfig(t.image), oci.WithEnv(t.opts.Env), oci.WithMounts(t.opts.Mounts), seccomp.WithDefaultProfile())
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("error creating container: %w", err)
+	}
 
-	return c.NewContainer(
-		t.ctx,
-		containerId,
-		containerd.WithNewSnapshot(snapshotName, t.image),
-		containerd.WithNewSpec(specOpts...),
-	)
+	containerId := strings.TrimSpace(stdout.String())
+	t.logger.Infof("nerdctl created container %s", containerId)
+
+	return c.LoadContainer(t.ctx, containerId)
+}
+
+func (t *createTask) buildCreateContainerCmd(c Containerd) []string {
+	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerId(), "--user", t.opts.User}
+	for _, m := range t.opts.Mounts {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", m.Source, m.Destination))
+	}
+	for _, e := range t.opts.Env {
+		args = append(args, "-e", e)
+	}
+	args = append(args, t.opts.Image)
+	return args
 }
 
 func (t *createTask) generateContainerId() string {
