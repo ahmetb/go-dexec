@@ -3,6 +3,7 @@ package dexec
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cio"
@@ -13,7 +14,6 @@ import (
 	"github.com/containerd/containerd/pkg/netns"
 	cni "github.com/containerd/go-cni"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"io"
 	"math"
@@ -65,7 +65,7 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
 	ctx, done, err := c.WithLease(ctx, leases.WithExpiration(expiration), leases.WithRandomID())
 	if err != nil {
-		return errors.Wrap(err, "error creating containerd context")
+		return fmt.Errorf("error creating containerd context: %w", err)
 	}
 	t.ctx = ctx
 	t.doneFunc = done
@@ -74,14 +74,14 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	// the client
 	image, err := c.GetImage(t.ctx, t.opts.Image)
 	if err != nil {
-		return errors.Wrapf(err, "error pulling image %s", t.opts.Image)
+		return fmt.Errorf("error getting image %s from namespace %s: %w", t.opts.Image, c.Client.DefaultNamespace(), err)
 	}
 	t.image = image
 
 	container, err := t.createContainer(c)
 
 	if err != nil {
-		return errors.Wrap(err, "error creating container")
+		return fmt.Errorf("error creating container: %w", err)
 	} else {
 		logrus.Infof("successfully created container %s", container.ID())
 	}
@@ -149,7 +149,7 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	opts := []cio.Opt{cio.WithStreams(stdin, stdout, stderr)}
 	task, err := t.createTask(opts...)
 	if err != nil {
-		return errors.Wrap(err, "error creating task")
+		return fmt.Errorf("error creating task: %w", err)
 	} else {
 		t.logger.Infof("successfully created task %s", task.ID())
 	}
@@ -158,12 +158,12 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 
 	spec, err := t.createProcessSpec()
 	if err != nil {
-		return errors.Wrap(err, "error creating process spec")
+		return fmt.Errorf("error creating process spec: %w", err)
 	}
 	taskId := fmt.Sprintf("%s-task", t.container.ID())
 	ps, err := task.Exec(t.ctx, taskId, spec, cio.NewCreator(opts...))
 	if err != nil {
-		return errors.Wrap(err, "error creating process")
+		return fmt.Errorf("error creating process: %w", err)
 	} else {
 		t.logger.Infof("successfully exec'd process %s: %v", ps.ID(), spec.Args)
 	}
@@ -172,13 +172,13 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	// wait must always be called before start()
 	t.exitChan, err = ps.Wait(t.ctx)
 	if err != nil {
-		return errors.Wrap(err, "error waiting for process")
+		return fmt.Errorf("error waiting for process: %w", err)
 	} else {
 		t.logger.Infof("successfully got exit channel, task pid = %d", task.Pid())
 	}
 
 	if err = ps.Start(t.ctx); err != nil {
-		return errors.Wrap(err, "error starting process")
+		return fmt.Errorf("error starting process: %w", err)
 	} else {
 		t.logger.Infof("successfully started process %s", ps.ID())
 	}
@@ -197,7 +197,7 @@ func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
 func (t *createTask) createProcessSpec() (*specs.Process, error) {
 	spec, err := t.container.Spec(t.ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting spec from container")
+		return nil, fmt.Errorf("error getting spec from container: %w", err)
 	}
 
 	spec.Process.Args = t.cmd
@@ -277,10 +277,10 @@ func (t *createTask) cleanup(Containerd) error {
 	}
 	_, err := t.task.Delete(t.ctx, containerd.WithProcessKill)
 	if err != nil && !errdefs.IsNotFound(err) {
-		return errors.Wrap(err, "error deleting task")
+		return fmt.Errorf("error deleting task: %w", err)
 	}
 	if err = t.container.Delete(t.ctx, containerd.WithSnapshotCleanup); err == nil || errdefs.IsNotFound(err) {
 		return nil
 	}
-	return errors.Wrap(err, "error deleting container")
+	return fmt.Errorf("error deleting container: %w", err)
 }

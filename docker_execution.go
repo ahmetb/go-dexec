@@ -1,8 +1,8 @@
 package dexec
 
 import (
+	"errors"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 
 	"github.com/fsouza/go-dockerclient"
@@ -63,7 +63,7 @@ func (c *createContainer) create(d Docker, cmd []string) error {
 
 	container, err := d.Client.CreateContainer(c.opt)
 	if err != nil {
-		return fmt.Errorf("dexec: failed to create container: %v", err)
+		return fmt.Errorf("dexec: failed to create container: %w", err)
 	}
 
 	c.id = container.ID
@@ -75,7 +75,7 @@ func (c *createContainer) run(d Docker, stdin io.Reader, stdout, stderr io.Write
 		return errors.New("dexec: container is not created")
 	}
 	if err := d.Client.StartContainer(c.id, nil); err != nil {
-		return fmt.Errorf("dexec: failed to start container:  %v", err)
+		return fmt.Errorf("dexec: failed to start container:  %w", err)
 	}
 
 	opts := docker.AttachToContainerOptions{
@@ -91,7 +91,7 @@ func (c *createContainer) run(d Docker, stdin io.Reader, stdout, stderr io.Write
 	}
 	cw, err := d.Client.AttachToContainerNonBlocking(opts)
 	if err != nil {
-		return fmt.Errorf("dexec: failed to attach container: %v", err)
+		return fmt.Errorf("dexec: failed to attach container: %w", err)
 	}
 	c.cw = cw
 	return nil
@@ -104,14 +104,14 @@ func (c *createContainer) wait(d Docker) (exitCode int, err error) {
 		return -1, errors.New("dexec: container is not attached")
 	}
 	if err = c.cw.Wait(); err != nil {
-		return -1, fmt.Errorf("dexec: attach error: %v", err)
+		return -1, fmt.Errorf("dexec: attach error: %w", err)
 	}
 	ec, err := d.WaitContainer(c.id)
 	if err != nil {
-		return -1, fmt.Errorf("dexec: cannot wait for container: %v", err)
+		return -1, fmt.Errorf("dexec: cannot wait for container: %w", err)
 	}
 	if err := del(); err != nil {
-		return -1, fmt.Errorf("dexec: error deleting container: %v", err)
+		return -1, fmt.Errorf("dexec: error deleting container: %w", err)
 	}
 	return ec, nil
 }
@@ -129,7 +129,7 @@ func (c *createContainer) kill(d Docker) error {
 	if err == nil || errors.As(err, &nsc) || errors.As(err, &cnr) {
 		return nil
 	}
-	return errors.Wrap(err, "error stopping container")
+	return fmt.Errorf("error stopping container: %w", err)
 }
 
 func (c *createContainer) cleanup(d Docker) error {
@@ -142,8 +142,10 @@ func (c *createContainer) cleanup(d Docker) error {
 	}
 	var cnr *docker.ContainerNotRunning
 	if err != nil && !errors.As(err, &cnr) {
-		return errors.Wrap(err, "error stopping container")
+		return fmt.Errorf("error stopping container: %w", err)
 	}
-
-	return errors.Wrap(d.RemoveContainer(docker.RemoveContainerOptions{ID: containerId}), "error removing container")
+	if err = d.RemoveContainer(docker.RemoveContainerOptions{ID: containerId}); err != nil {
+		return fmt.Errorf("error removing container: %w", err)
+	}
+	return nil
 }

@@ -7,7 +7,6 @@ require (
 	github.com/containerd/go-cni v1.1.9
 	github.com/fsouza/go-dockerclient v1.9.8
 	github.com/opencontainers/runtime-spec v1.1.0
-	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.4
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
@@ -54,6 +53,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.0-rc2.0.20221005185240-3a7f492d3f1b // indirect
 	github.com/opencontainers/runc v1.1.5 // indirect
 	github.com/opencontainers/selinux v1.11.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.6.1 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
