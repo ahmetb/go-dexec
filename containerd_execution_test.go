@@ -129,7 +129,7 @@ func Test_createTask_run(t *testing.T) {
 	assert.Equal(t, ch, ct.exitChan)
 }
 
-func Test_createTask_generateContainerId(t *testing.T) {
+func Test_createTask_generateContainerName(t *testing.T) {
 	ct := &createTask{
 		opts: CreateTaskOptions{
 			CommandDetails: CommandDetails{
@@ -140,7 +140,7 @@ func Test_createTask_generateContainerId(t *testing.T) {
 		},
 	}
 	expectedRegex := "chains-1-2-3-[a-zA-Z]{6}"
-	containerId := ct.generateContainerId()
+	containerId := ct.generateContainerName()
 	assert.Regexp(t, regexp.MustCompile(expectedRegex), containerId)
 }
 

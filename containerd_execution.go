@@ -10,7 +10,6 @@ import (
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/leases"
 	"github.com/containerd/containerd/namespaces"
-	"github.com/containerd/containerd/oci"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 	"io"
@@ -49,6 +48,7 @@ type createTask struct {
 	exitChan  <-chan containerd.ExitStatus
 	tmpDir    string
 	logger    *logrus.Entry
+	labels    map[string]string
 }
 
 func (t *createTask) create(c Containerd, cmd []string) error {
@@ -59,12 +59,22 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 	// since we are spinning up hundreds of thousands of tasks per day, let's set a shorter expiration
 	// so we can try and be good netizens
 	ctx := namespaces.WithNamespace(context.Background(), c.DefaultNamespace())
-	ctx, done, err := c.WithLease(ctx, leases.WithExpiration(expiration), leases.WithRandomID())
+	ctx, deleteLease, err := c.WithLease(ctx, leases.WithExpiration(expiration), leases.WithRandomID())
 	if err != nil {
 		return fmt.Errorf("error creating containerd context: %w", err)
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, expiration)
+
 	t.ctx = ctx
-	t.doneFunc = done
+	t.doneFunc = func(ctx context.Context) error {
+		err := deleteLease(ctx)
+		cancel()
+		return err
+	}
+
+	t.buildLabels()
+
 	// in order for this to work the image must already be pulled into the namespace or be a
 	// publicly accessible image. if we need to (re)fetch private images, we need to pass in auth to
 	// the client
@@ -105,18 +115,21 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 }
 
 func (t *createTask) buildCreateContainerCmd(c Containerd) []string {
-	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerId(), "--user", t.opts.User}
+	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerName(), "--user", t.opts.User}
 	for _, m := range t.opts.Mounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", m.Source, m.Destination))
 	}
 	for _, e := range t.opts.Env {
 		args = append(args, "-e", e)
 	}
+	for key, value := range t.labels {
+		args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+	}
 	args = append(args, t.opts.Image)
 	return args
 }
 
-func (t *createTask) generateContainerId() string {
+func (t *createTask) generateContainerName() string {
 	// AA: in order to prevent errors such as being unable to re-run a command due to a failure
 	// or timing issue when cleaning up a prior attempt, append a random suffix to the end to make
 	// sure we can always create the container
@@ -126,19 +139,27 @@ func (t *createTask) generateContainerId() string {
 	return fmt.Sprintf("chains-%d-%d-%d-%s", abs(details.ChainExecutorId), abs(details.ExecutorId), abs(details.ResultId), suffix)
 }
 
+func (t *createTask) buildLabels() {
+	labels := make(map[string]string)
+
+	labels["wk/owner"] = "chains"
+	labels["chains/commandExecutorId"] = strconv.FormatInt(t.opts.CommandDetails.ExecutorId, 10)
+	labels["chains/chainExecutorId"] = strconv.FormatInt(t.opts.CommandDetails.ChainExecutorId, 10)
+	labels["chains/resultId"] = strconv.FormatInt(t.opts.CommandDetails.ResultId, 10)
+
+	if deadline, ok := t.ctx.Deadline(); ok {
+		labels["chains/deadline"] = deadline.Format(time.RFC3339)
+	}
+
+	t.labels = labels
+}
+
 func abs(v int64) int64 {
 	if v >= 0 {
 		return v
 	}
 	f := math.Abs(float64(v))
 	return int64(f)
-}
-
-func (t *createTask) createUserOpts() []oci.SpecOpts {
-	if t.opts.User == "" {
-		return []oci.SpecOpts{}
-	}
-	return []oci.SpecOpts{oci.WithUser(t.opts.User), oci.WithAdditionalGIDs(t.opts.User)}
 }
 
 func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -207,17 +228,14 @@ func (t *createTask) createProcessSpec() (*specs.Process, error) {
 func (t *createTask) wait(c Containerd) (int, error) {
 	defer t.cleanup(c)
 
-	for {
-		select {
-		case exitStatus := <-t.exitChan:
-			t.logger.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
-			return int(exitStatus.ExitCode()), exitStatus.Error()
-		case <-t.ctx.Done():
-			t.logger.Warn("context cancelled before completing process")
-			return -1, context.Canceled
-		}
+	select {
+	case exitStatus := <-t.exitChan:
+		t.logger.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
+		return int(exitStatus.ExitCode()), exitStatus.Error()
+	case <-t.ctx.Done():
+		t.logger.Warn("context cancelled before completing process")
+		return -1, context.Canceled
 	}
-
 }
 
 func (t *createTask) setEnv(env []string) error {
