@@ -20,7 +20,18 @@ import (
 	"time"
 )
 
-const randomSuffixLength = 6
+const (
+	randomSuffixLength = 6
+	timeoutBuffer      = 5 * time.Minute
+	nerdctlBinary      = "nerdctl"
+
+	chains                 = "chains"
+	ownerLabel             = "wk/owner"
+	deadlineLabel          = "chains/deadline"
+	commandExecutorIdLabel = "chains/commandExecutorId"
+	chainExecutorIdLabel   = "chains/chainExecutorId"
+	commandResultIdLabel   = "chains/commandResultId"
+)
 
 type CreateTaskOptions struct {
 	Image          string
@@ -54,7 +65,7 @@ type createTask struct {
 func (t *createTask) create(c Containerd, cmd []string) error {
 	t.cmd = cmd
 	// add buffer to the command timeout
-	expiration := t.opts.CommandTimeout + (5 * time.Minute)
+	expiration := t.opts.CommandTimeout + timeoutBuffer
 	// the default containerd settings makes things eligible for garbage collection after 24 hours
 	// since we are spinning up hundreds of thousands of tasks per day, let's set a shorter expiration
 	// so we can try and be good netizens
@@ -89,9 +100,9 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
 	nerdctlArgs := t.buildCreateContainerCmd(c)
+	cmd := exec.Command(nerdctlBinary, nerdctlArgs...)
 	stdout := &bytes.Buffer{}
 	stdErr := &bytes.Buffer{}
-	cmd := exec.Command("nerdctl", nerdctlArgs...)
 	cmd.Stdout = stdout
 	cmd.Stderr = stdErr
 
@@ -133,13 +144,13 @@ func (t *createTask) generateContainerName() string {
 func (t *createTask) buildLabels() {
 	labels := make(map[string]string)
 
-	labels["wk/owner"] = "chains"
-	labels["chains/commandExecutorId"] = strconv.FormatInt(t.opts.CommandDetails.ExecutorId, 10)
-	labels["chains/chainExecutorId"] = strconv.FormatInt(t.opts.CommandDetails.ChainExecutorId, 10)
-	labels["chains/resultId"] = strconv.FormatInt(t.opts.CommandDetails.ResultId, 10)
+	labels[ownerLabel] = chains
+	labels[commandExecutorIdLabel] = strconv.FormatInt(t.opts.CommandDetails.ExecutorId, 10)
+	labels[chainExecutorIdLabel] = strconv.FormatInt(t.opts.CommandDetails.ChainExecutorId, 10)
+	labels[commandResultIdLabel] = strconv.FormatInt(t.opts.CommandDetails.ResultId, 10)
 
 	if deadline, ok := t.ctx.Deadline(); ok {
-		labels["chains/deadline"] = deadline.Format(time.RFC3339)
+		labels[deadlineLabel] = deadline.Format(time.RFC3339)
 	}
 
 	t.labels = labels
