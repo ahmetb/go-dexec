@@ -99,7 +99,7 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 }
 
 func (t *createTask) createContainer(c Containerd) (containerd.Container, error) {
-	nerdctlArgs := t.buildCreateContainerCmd(c)
+	nerdctlArgs := t.buildCreateContainerArgs(c)
 	cmd := exec.Command(nerdctlBinary, nerdctlArgs...)
 	stdout := &bytes.Buffer{}
 	stdErr := &bytes.Buffer{}
@@ -111,12 +111,12 @@ func (t *createTask) createContainer(c Containerd) (containerd.Container, error)
 	}
 
 	containerId := strings.TrimSpace(stdout.String())
-	t.logger.Infof("nerdctl created container %s", containerId)
+	t.logger.Debugf("nerdctl created container %s", containerId)
 
 	return c.LoadContainer(t.ctx, containerId)
 }
 
-func (t *createTask) buildCreateContainerCmd(c Containerd) []string {
+func (t *createTask) buildCreateContainerArgs(c Containerd) []string {
 	args := []string{"--namespace", c.Client.DefaultNamespace(), "create", "--name", t.generateContainerName(), "--user", t.opts.User}
 	for _, m := range t.opts.Mounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", m.Source, m.Destination))
@@ -169,8 +169,6 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	task, err := t.createTask(opts...)
 	if err != nil {
 		return fmt.Errorf("error creating task: %w", err)
-	} else {
-		t.logger.Infof("successfully created task %s", task.ID())
 	}
 
 	t.task = task
@@ -183,8 +181,6 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	ps, err := task.Exec(t.ctx, taskId, spec, cio.NewCreator(opts...))
 	if err != nil {
 		return fmt.Errorf("error creating process: %w", err)
-	} else {
-		t.logger.Infof("successfully exec'd process %s: %v", ps.ID(), spec.Args)
 	}
 	t.process = ps
 
@@ -192,24 +188,15 @@ func (t *createTask) run(c Containerd, stdin io.Reader, stdout, stderr io.Writer
 	t.exitChan, err = ps.Wait(t.ctx)
 	if err != nil {
 		return fmt.Errorf("error waiting for process: %w", err)
-	} else {
-		t.logger.Infof("successfully got exit channel, task pid = %d", task.Pid())
 	}
 
 	if err = ps.Start(t.ctx); err != nil {
 		return fmt.Errorf("error starting process: %w", err)
-	} else {
-		t.logger.Infof("successfully started process %s", ps.ID())
 	}
 	return nil
 }
 
 func (t *createTask) createTask(opts ...cio.Opt) (containerd.Task, error) {
-	if task, err := t.container.Task(t.ctx, cio.NewAttach(opts...)); err == nil {
-		t.logger.Info("Using existing task")
-		return task, nil
-	}
-	t.logger.Info("Using new task")
 	return t.container.NewTask(t.ctx, cio.NewCreator(opts...))
 }
 
@@ -232,10 +219,9 @@ func (t *createTask) wait(c Containerd) (int, error) {
 
 	select {
 	case exitStatus := <-t.exitChan:
-		t.logger.Infof("received exit status %d from chan for ps %s", exitStatus, t.process.ID())
 		return int(exitStatus.ExitCode()), exitStatus.Error()
 	case <-t.ctx.Done():
-		t.logger.Warn("context cancelled before completing process")
+		t.logger.Warn("context cancelled before receiving exit status from container/task")
 		return -1, context.Canceled
 	}
 }
