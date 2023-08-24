@@ -75,15 +75,6 @@ func (t *createTask) create(c Containerd, cmd []string) error {
 
 	t.buildLabels()
 
-	// in order for this to work the image must already be pulled into the namespace or be a
-	// publicly accessible image. if we need to (re)fetch private images, we need to pass in auth to
-	// the client
-	image, err := c.GetImage(t.ctx, t.opts.Image)
-	if err != nil {
-		return fmt.Errorf("error getting image %s from namespace %s: %w", t.opts.Image, c.Client.DefaultNamespace(), err)
-	}
-	t.image = image
-
 	container, err := t.createContainer(c)
 
 	if err != nil {
